@@ -23,6 +23,9 @@ from backend.services.trading_engine import TradingEngine
 
 engine_instance: TradingEngine = None
 
+os.makedirs("logs", exist_ok=True)
+os.makedirs("database", exist_ok=True)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -37,8 +40,6 @@ logger = logging.getLogger("app")
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global engine_instance
-    os.makedirs("logs", exist_ok=True)
-    os.makedirs("database", exist_ok=True)
     init_db()
     engine_instance = TradingEngine()
     task = asyncio.create_task(engine_instance.start())
