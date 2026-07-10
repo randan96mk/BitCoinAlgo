@@ -112,8 +112,9 @@ class TradingEngine:
     async def _record_signal(self, result: SignalResult):
         session = get_session(self.engine)
         try:
+            bar_time = result.timestamp if result.timestamp else datetime.now(timezone.utc)
             signal = Signal(
-                timestamp=datetime.now(timezone.utc),
+                timestamp=bar_time,
                 symbol=self.config.get("exchange.symbol", "BTC/USDT"),
                 timeframe=self.config.get("strategy.timeframe", "3m"),
                 direction=result.signal_type,
@@ -129,7 +130,7 @@ class TradingEngine:
                 trend_ma=result.trend_ma_value,
                 regime=result.regime,
                 signal_score=result.signal_score,
-                entry_time=datetime.now(timezone.utc),
+                entry_time=bar_time,
                 is_closed=False,
             )
             session.add(signal)

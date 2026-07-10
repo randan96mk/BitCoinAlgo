@@ -129,19 +129,29 @@ async def get_chart_candles(timeframe: Optional[str] = Query(None), limit: int =
         if not _isnan(rsi_vals.iloc[i]):
             rsi_data.append({"time": t, "value": round(rsi_vals.iloc[i], 2)})
 
+    # Build set of candle timestamps for snapping markers
+    candle_times = [c["time"] for c in candles]
+
+    def snap_to_candle(epoch: int) -> int:
+        """Snap a timestamp to the nearest candle in the dataset."""
+        if not candle_times:
+            return epoch
+        best = min(candle_times, key=lambda ct: abs(ct - epoch))
+        return best
+
     session = _get_db()
     try:
         signals = session.query(Signal).order_by(desc(Signal.timestamp)).limit(50).all()
         markers = []
         for s in signals:
             if s.entry_time:
-                t = int(s.entry_time.timestamp())
+                t = snap_to_candle(int(s.entry_time.timestamp()))
                 if s.direction == "long":
                     markers.append({"time": t, "position": "belowBar", "color": "#2196f3", "shape": "arrowUp", "text": f"BUY {s.entry_price:.0f}"})
                 else:
                     markers.append({"time": t, "position": "aboveBar", "color": "#ff9800", "shape": "arrowDown", "text": f"SELL {s.entry_price:.0f}"})
             if s.exit_time and s.is_closed:
-                t = int(s.exit_time.timestamp())
+                t = snap_to_candle(int(s.exit_time.timestamp()))
                 color = "#26a69a" if s.is_winner else "#ef5350"
                 markers.append({"time": t, "position": "belowBar" if s.direction == "short" else "aboveBar", "color": color, "shape": "circle", "text": f"EXIT {s.exit_price:.0f}"})
 
