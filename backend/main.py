@@ -74,6 +74,11 @@ async def analytics_page(request: Request):
     return templates.TemplateResponse("analytics.html", {"request": request})
 
 
+@app.get("/chart", response_class=HTMLResponse)
+async def chart_page(request: Request):
+    return templates.TemplateResponse("chart.html", {"request": request})
+
+
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
     return templates.TemplateResponse("settings.html", {"request": request})
