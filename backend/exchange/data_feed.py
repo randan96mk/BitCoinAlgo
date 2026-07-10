@@ -1,20 +1,32 @@
 """
-Free market data feed using CCXT (Binance → Bybit → Coinbase fallback).
-Uses synchronous ccxt in a thread pool to avoid aiohttp segfaults on Python 3.14.
+Free market data feed using direct REST API calls via httpx.
+No ccxt — avoids C extension segfaults on Python 3.14.
 """
 import asyncio
 import logging
-from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
-import ccxt
+import httpx
 import pandas as pd
 
 from backend.config import Config
 
 logger = logging.getLogger("exchange")
 
-EXCHANGE_PRIORITY = ["binance", "bybit", "coinbase"]
+EXCHANGE_APIS = {
+    "binance": {
+        "base": "https://api.binance.com",
+        "klines": "/api/v3/klines",
+        "ticker": "/api/v3/ticker/price",
+        "symbol_fmt": lambda s: s.replace("/", ""),
+    },
+    "bybit": {
+        "base": "https://api.bybit.com",
+        "klines": "/v5/market/kline",
+        "ticker": "/v5/market/tickers",
+        "symbol_fmt": lambda s: s.replace("/", ""),
+    },
+}
 
 TIMEFRAME_MAP = {
     "1m": "1m", "3m": "3m", "5m": "5m", "15m": "15m",
@@ -22,7 +34,10 @@ TIMEFRAME_MAP = {
     "240": "4h",
 }
 
-_pool = ThreadPoolExecutor(max_workers=2)
+BYBIT_TF_MAP = {
+    "1m": "1", "3m": "3", "5m": "5", "15m": "15",
+    "30m": "30", "1h": "60", "4h": "240", "1d": "D",
+}
 
 
 class DataFeed:
@@ -32,20 +47,28 @@ class DataFeed:
         self.symbol = cfg.get("exchange.symbol", "BTC/USDT")
         self.timeframe = cfg.get("strategy.timeframe", "3m")
         self.htf_timeframe = cfg.get("strategy.htf_timeframe", "240")
-        self._exchange: Optional[ccxt.Exchange] = None
+        self._client: Optional[httpx.AsyncClient] = None
         self._connected = False
+        self._api_config = None
 
     async def connect(self) -> bool:
         exchanges_to_try = [self.exchange_name] + [
-            e for e in EXCHANGE_PRIORITY if e != self.exchange_name
+            e for e in EXCHANGE_APIS if e != self.exchange_name
         ]
-        loop = asyncio.get_event_loop()
         for name in exchanges_to_try:
+            if name not in EXCHANGE_APIS:
+                continue
             try:
-                exchange_class = getattr(ccxt, name)
-                ex = exchange_class({"enableRateLimit": True})
-                await loop.run_in_executor(_pool, ex.load_markets)
-                self._exchange = ex
+                api = EXCHANGE_APIS[name]
+                client = httpx.AsyncClient(base_url=api["base"], timeout=15)
+                resp = await client.get(api["ticker"], params={
+                    "symbol": api["symbol_fmt"](self.symbol)
+                } if name == "binance" else {
+                    "category": "linear", "symbol": api["symbol_fmt"](self.symbol)
+                })
+                resp.raise_for_status()
+                self._client = client
+                self._api_config = api
                 self._connected = True
                 self.exchange_name = name
                 logger.info(f"Connected to {name}")
@@ -57,34 +80,70 @@ class DataFeed:
 
     async def fetch_candles(self, timeframe: Optional[str] = None,
                             limit: int = 200) -> pd.DataFrame:
-        if not self._connected or not self._exchange:
+        if not self._connected or not self._client:
             raise ConnectionError("Not connected to any exchange")
 
         tf = TIMEFRAME_MAP.get(timeframe or self.timeframe, timeframe or self.timeframe)
-        loop = asyncio.get_event_loop()
-        ohlcv = await loop.run_in_executor(
-            _pool, lambda: self._exchange.fetch_ohlcv(self.symbol, tf, limit=limit)
-        )
-        df = pd.DataFrame(ohlcv, columns=["timestamp", "open", "high", "low", "close", "volume"])
-        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
+        symbol = self._api_config["symbol_fmt"](self.symbol)
+
+        if self.exchange_name == "binance":
+            resp = await self._client.get(self._api_config["klines"], params={
+                "symbol": symbol, "interval": tf, "limit": limit
+            })
+            resp.raise_for_status()
+            raw = resp.json()
+            df = pd.DataFrame(raw, columns=[
+                "timestamp", "open", "high", "low", "close", "volume",
+                "_ct", "_qav", "_nt", "_tbbav", "_tbqav", "_ignore"
+            ])
+            df = df[["timestamp", "open", "high", "low", "close", "volume"]]
+            for col in ["open", "high", "low", "close", "volume"]:
+                df[col] = pd.to_numeric(df[col])
+
+        elif self.exchange_name == "bybit":
+            bybit_tf = BYBIT_TF_MAP.get(tf, "3")
+            resp = await self._client.get(self._api_config["klines"], params={
+                "category": "linear", "symbol": symbol,
+                "interval": bybit_tf, "limit": limit
+            })
+            resp.raise_for_status()
+            raw = resp.json()["result"]["list"]
+            df = pd.DataFrame(raw, columns=[
+                "timestamp", "open", "high", "low", "close", "volume", "_turnover"
+            ])
+            df = df[["timestamp", "open", "high", "low", "close", "volume"]]
+            for col in ["open", "high", "low", "close", "volume"]:
+                df[col] = pd.to_numeric(df[col])
+            df = df.iloc[::-1].reset_index(drop=True)
+
+        df["timestamp"] = pd.to_datetime(pd.to_numeric(df["timestamp"]), unit="ms", utc=True)
         return df
 
     async def fetch_htf_candles(self, limit: int = 200) -> pd.DataFrame:
         return await self.fetch_candles(self.htf_timeframe, limit)
 
     async def get_current_price(self) -> float:
-        if not self._connected or not self._exchange:
+        if not self._connected or not self._client:
             raise ConnectionError("Not connected")
-        loop = asyncio.get_event_loop()
-        ticker = await loop.run_in_executor(
-            _pool, lambda: self._exchange.fetch_ticker(self.symbol)
-        )
-        return ticker["last"]
+        symbol = self._api_config["symbol_fmt"](self.symbol)
+
+        if self.exchange_name == "binance":
+            resp = await self._client.get(self._api_config["ticker"], params={"symbol": symbol})
+            resp.raise_for_status()
+            return float(resp.json()["price"])
+        elif self.exchange_name == "bybit":
+            resp = await self._client.get(self._api_config["ticker"], params={
+                "category": "linear", "symbol": symbol
+            })
+            resp.raise_for_status()
+            return float(resp.json()["result"]["list"][0]["lastPrice"])
+        return 0
 
     @property
     def is_connected(self) -> bool:
         return self._connected
 
     async def close(self):
-        self._exchange = None
+        if self._client:
+            await self._client.aclose()
         self._connected = False
