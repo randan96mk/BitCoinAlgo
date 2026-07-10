@@ -54,6 +54,7 @@ app = FastAPI(title="BitCoin Trading Alerts", lifespan=lifespan)
 templates_dir = Path(__file__).parent / "templates"
 static_dir = Path(__file__).parent / "static"
 templates = Jinja2Templates(directory=str(templates_dir))
+static_dir.mkdir(parents=True, exist_ok=True)
 app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 app.include_router(api_router)
 
