@@ -48,10 +48,8 @@ class CardwellRSIStrategy:
         self.tp1_mult = cfg.get("strategy.tp1_atr_mult", 1.0)
         self.tp2_mult = cfg.get("strategy.tp2_atr_mult", 2.0)
         self.tp3_mult = cfg.get("strategy.tp3_atr_mult", 3.0)
-        # Per-bar state — only updated when a NEW bar is seen
-        self._bull_confirm_count = 0
-        self._bear_confirm_count = 0
-        self._prev_regime = 0
+        # Regime state is rebuilt from full history on every evaluate();
+        # only the last-fired bar is tracked to avoid duplicate alerts.
         self._last_bar_time = None
 
     def evaluate(self, df: pd.DataFrame, htf_df: Optional[pd.DataFrame] = None) -> SignalResult:
@@ -83,53 +81,51 @@ class CardwellRSIStrategy:
 
         cur_rsi = rsi_val.iloc[idx]
         cur_trend_ma = trend_ma.iloc[idx]
-        cur_close = close.iloc[idx]
         cur_atr = atr_val.iloc[idx]
         cur_adx = adx_val.iloc[idx]
 
-        is_uptrend = cur_close > cur_trend_ma
-        is_downtrend = cur_close < cur_trend_ma
+        # ── Full-history replay (matches Pine, which computes regime state
+        # across the WHOLE chart, not just bars seen since process start).
+        # Rebuilding state every call makes the strategy stateless and
+        # restart-proof: no signals missed after a server restart.
+        bull_cnt = 0
+        bear_cnt = 0
+        prev_state = 0
+        state = 0
+        rsi_np = rsi_val.values
+        ma_np = trend_ma.values
+        close_np = close.values
+        for i in range(idx + 1):
+            r = rsi_np[i]
+            m = ma_np[i]
+            if np.isnan(r) or np.isnan(m):
+                continue
+            c = close_np[i]
+            bull_raw = c > m and self.bull_lo <= r <= self.bull_hi
+            bear_raw = c < m and self.bear_lo <= r <= self.bear_hi
+            bull_cnt = bull_cnt + 1 if bull_raw else 0
+            bear_cnt = bear_cnt + 1 if bear_raw else 0
+            bull_reg = bull_raw and bull_cnt >= self.confirm_bars
+            bear_reg = bear_raw and bear_cnt >= self.confirm_bars
+            prev_state = state
+            state = 1 if bull_reg else (-1 if bear_reg else 0)
 
-        in_bull_range = self.bull_lo <= cur_rsi <= self.bull_hi
-        in_bear_range = self.bear_lo <= cur_rsi <= self.bear_hi
+        regime_state = state  # state at idx; prev_state = state at idx-1
 
-        bull_regime_raw = is_uptrend and in_bull_range
-        bear_regime_raw = is_downtrend and in_bear_range
-
-        # Always return current indicator values
         result = SignalResult(
             rsi_value=round(float(cur_rsi), 2),
             adx_value=round(float(cur_adx), 2),
             atr_value=round(float(cur_atr), 2),
             trend_ma_value=round(float(cur_trend_ma), 2),
-            regime="bullish" if bull_regime_raw else ("bearish" if bear_regime_raw else "neutral"),
+            regime="bullish" if regime_state == 1 else ("bearish" if regime_state == -1 else "neutral"),
             timestamp=df["timestamp"].iloc[idx] if "timestamp" in df.columns else None,
         )
 
-        # Only evaluate signal logic on NEW bars (matches Pine's once-per-bar execution)
+        # Fire each bar's signal at most once across repeated ticks
         bar_time = df["timestamp"].iloc[idx] if "timestamp" in df.columns else idx
         if bar_time == self._last_bar_time:
             return result
         self._last_bar_time = bar_time
-
-        # Confirm counters — increment once per bar (matches Pine: bullConfirmCount := bullRegimeRaw ? bullConfirmCount + 1 : 0)
-        if bull_regime_raw:
-            self._bull_confirm_count += 1
-        else:
-            self._bull_confirm_count = 0
-
-        if bear_regime_raw:
-            self._bear_confirm_count += 1
-        else:
-            self._bear_confirm_count = 0
-
-        bull_regime = bull_regime_raw and self._bull_confirm_count >= self.confirm_bars
-        bear_regime = bear_regime_raw and self._bear_confirm_count >= self.confirm_bars
-
-        regime_state = 1 if bull_regime else (-1 if bear_regime else 0)
-
-        # Update regime label with confirmed state
-        result.regime = "bullish" if bull_regime else ("bearish" if bear_regime else "neutral")
 
         # HTF confirmation (matches Pine: request.security with [1] lookback)
         htf_bull_ok = True
@@ -146,12 +142,16 @@ class CardwellRSIStrategy:
         if self.use_adx:
             chop_ok = cur_adx >= self.adx_min
 
-        # Signal detection — transition into regime (matches Pine: regimeState == 1 and prevRegimeState != 1)
-        long_signal = regime_state == 1 and self._prev_regime != 1 and htf_bull_ok and chop_ok
-        short_signal = regime_state == -1 and self._prev_regime != -1 and htf_bear_ok and chop_ok
+        # Signal detection — transition into regime at the last confirmed bar
+        # (matches Pine: regimeState == 1 and prevRegimeState != 1)
+        long_signal = regime_state == 1 and prev_state != 1 and htf_bull_ok and chop_ok
+        short_signal = regime_state == -1 and prev_state != -1 and htf_bear_ok and chop_ok
 
-        # Update prev regime AFTER signal check (Pine: prevRegimeState = regimeState[1])
-        self._prev_regime = regime_state
+        cur_close = close.iloc[idx]
+        is_uptrend = cur_close > cur_trend_ma
+        is_downtrend = cur_close < cur_trend_ma
+        in_bull_range = self.bull_lo <= cur_rsi <= self.bull_hi
+        in_bear_range = self.bear_lo <= cur_rsi <= self.bear_hi
 
         if long_signal:
             # Pine: entryPrice = close[1] — previous bar's close

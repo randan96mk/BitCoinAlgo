@@ -234,6 +234,11 @@ async function loadAll() {
 
     // Chart
     if (chartData && chartData.candles && chartData.candles.length > 0) {
+        // lightweight-charts renders epoch times as UTC; shift so the
+        // axis shows the viewer's local time (matches TradingView).
+        const tzShift = -new Date().getTimezoneOffset() * 60;
+        [chartData.candles, chartData.volumes, chartData.sma20, chartData.sma50, chartData.rsi, chartData.markers || []]
+            .forEach(arr => arr.forEach(d => { d.time += tzShift; }));
         candleSeries.setData(chartData.candles);
         volumeSeries.setData(showVol ? chartData.volumes : []);
         sma20Series.setData(showSMA ? chartData.sma20 : []);
@@ -311,8 +316,8 @@ async function loadAll() {
         const rCard = document.getElementById('regime-card');
         rCard.className = 'bg-surface rounded-lg p-3 border ' + (regime === 'BULLISH' ? 'border-green-800 glow-green' : regime === 'BEARISH' ? 'border-red-800 glow-red' : 'border-border');
 
-        // Candle time
-        document.getElementById('candle-time').textContent = new Date(last.time * 1000).toLocaleTimeString();
+        // Candle time (un-shift the tz offset applied for axis display)
+        document.getElementById('candle-time').textContent = new Date((last.time - tzShift) * 1000).toLocaleTimeString();
 
         // Active trade
         const atEl = document.getElementById('active-trade');
