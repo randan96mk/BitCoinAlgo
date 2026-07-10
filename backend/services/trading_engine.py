@@ -14,6 +14,22 @@ from backend.telegram.notifier import TelegramNotifier
 
 logger = logging.getLogger("engine")
 
+
+def utcnow_naive() -> datetime:
+    """Naive UTC datetime — matches how SQLite stores DateTime columns."""
+    return datetime.now(timezone.utc).replace(tzinfo=None)
+
+
+def to_naive_utc(dt) -> datetime:
+    """Normalize any datetime (aware, naive, pandas Timestamp) to naive UTC."""
+    if dt is None:
+        return utcnow_naive()
+    if hasattr(dt, "to_pydatetime"):
+        dt = dt.to_pydatetime()
+    if dt.tzinfo is not None:
+        dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+    return dt
+
 TIMEFRAME_SECONDS = {
     "1m": 60, "3m": 180, "5m": 300, "15m": 900,
     "30m": 1800, "1h": 3600, "4h": 14400,
@@ -112,7 +128,7 @@ class TradingEngine:
     async def _record_signal(self, result: SignalResult):
         session = get_session(self.engine)
         try:
-            bar_time = result.timestamp if result.timestamp else datetime.now(timezone.utc)
+            bar_time = to_naive_utc(result.timestamp)
             signal = Signal(
                 timestamp=bar_time,
                 symbol=self.config.get("exchange.symbol", "BTC/USDT"),
@@ -148,7 +164,7 @@ class TradingEngine:
             for sig in open_signals:
                 exit_reason = self.strategy.check_exit(sig, self._current_price)
                 if exit_reason:
-                    now = datetime.now(timezone.utc)
+                    now = utcnow_naive()
                     sig.exit_price = self._current_price
                     sig.exit_time = now
                     sig.exit_reason = exit_reason
