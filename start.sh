@@ -31,7 +31,7 @@ source .venv/bin/activate
 # Install/update deps
 echo "📦 Installing dependencies..."
 pip install --quiet --upgrade pip
-pip install --quiet -r requirements.txt
+pip install --quiet --upgrade -r requirements.txt
 
 # Create required dirs
 mkdir -p logs database

@@ -92,13 +92,17 @@ class DataFeed:
             })
             resp.raise_for_status()
             raw = resp.json()
-            df = pd.DataFrame(raw, columns=[
-                "timestamp", "open", "high", "low", "close", "volume",
-                "_ct", "_qav", "_nt", "_tbbav", "_tbqav", "_ignore"
-            ])
-            df = df[["timestamp", "open", "high", "low", "close", "volume"]]
-            for col in ["open", "high", "low", "close", "volume"]:
-                df[col] = pd.to_numeric(df[col])
+            rows = []
+            for r in raw:
+                rows.append({
+                    "timestamp": int(r[0]),
+                    "open": float(r[1]),
+                    "high": float(r[2]),
+                    "low": float(r[3]),
+                    "close": float(r[4]),
+                    "volume": float(r[5]),
+                })
+            df = pd.DataFrame(rows)
 
         elif self.exchange_name == "bybit":
             bybit_tf = BYBIT_TF_MAP.get(tf, "3")
@@ -108,15 +112,20 @@ class DataFeed:
             })
             resp.raise_for_status()
             raw = resp.json()["result"]["list"]
-            df = pd.DataFrame(raw, columns=[
-                "timestamp", "open", "high", "low", "close", "volume", "_turnover"
-            ])
-            df = df[["timestamp", "open", "high", "low", "close", "volume"]]
-            for col in ["open", "high", "low", "close", "volume"]:
-                df[col] = pd.to_numeric(df[col])
+            rows = []
+            for r in raw:
+                rows.append({
+                    "timestamp": int(r[0]),
+                    "open": float(r[1]),
+                    "high": float(r[2]),
+                    "low": float(r[3]),
+                    "close": float(r[4]),
+                    "volume": float(r[5]),
+                })
+            df = pd.DataFrame(rows)
             df = df.iloc[::-1].reset_index(drop=True)
 
-        df["timestamp"] = pd.to_datetime(pd.to_numeric(df["timestamp"]), unit="ms", utc=True)
+        df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         return df
 
     async def fetch_htf_candles(self, limit: int = 200) -> pd.DataFrame:
