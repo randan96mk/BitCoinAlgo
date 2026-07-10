@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% set active = "analytics" %}
+{% block title %}Analytics - BTC Trading Alerts{% endblock %}
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Performance Analytics</h1>
+
+    <div id="stats-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4"></div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Equity Curve</h3>
+            <canvas id="equity-chart" height="200"></canvas>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Monthly PnL</h3>
+            <canvas id="monthly-chart" height="200"></canvas>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Daily PnL (Last 30 days)</h3>
+            <canvas id="daily-chart" height="200"></canvas>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Win/Loss Ratio</h3>
+            <canvas id="winloss-chart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<script>
+async function loadAnalytics() {
+    const data = await fetchJSON('/api/analytics');
+
+    const stats = [
+        {label: 'Total Signals', value: data.total_signals, color: 'text-white'},
+        {label: 'Win Rate', value: data.win_rate.toFixed(1) + '%', color: 'text-green-400'},
+        {label: 'Loss Rate', value: data.loss_rate.toFixed(1) + '%', color: 'text-red-400'},
+        {label: 'Net Profit', value: '$' + data.net_profit.toFixed(2), color: data.net_profit >= 0 ? 'text-green-400' : 'text-red-400'},
+        {label: 'Total Profit', value: '$' + data.total_profit.toFixed(2), color: 'text-green-400'},
+        {label: 'Total Loss', value: '$' + data.total_loss.toFixed(2), color: 'text-red-400'},
+        {label: 'Profit Factor', value: data.profit_factor.toFixed(2), color: 'text-blue-400'},
+        {label: 'Max Drawdown', value: '$' + data.max_drawdown.toFixed(2), color: 'text-orange-400'},
+        {label: 'Avg Profit', value: '$' + data.avg_profit.toFixed(2), color: 'text-green-400'},
+        {label: 'Avg Loss', value: '$' + data.avg_loss.toFixed(2), color: 'text-red-400'},
+        {label: 'Avg Duration', value: data.avg_duration_min.toFixed(0) + ' min', color: 'text-gray-300'},
+        {label: 'Long/Short', value: data.long_trades + ' / ' + data.short_trades, color: 'text-gray-300'},
+    ];
+
+    document.getElementById('stats-grid').innerHTML = stats.map(s => `
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-xs text-gray-400 uppercase">${s.label}</div>
+            <div class="text-lg font-semibold mt-1 ${s.color}">${s.value}</div>
+        </div>
+    `).join('');
+
+    // Equity curve
+    if (data.equity_curve.length > 0) {
+        new Chart(document.getElementById('equity-chart'), {
+            type: 'line',
+            data: {
+                labels: data.equity_curve.map(p => p.time.slice(0,10)),
+                datasets: [{
+                    data: data.equity_curve.map(p => p.equity),
+                    borderColor: '#3b82f6', backgroundColor: 'rgba(59,130,246,0.1)',
+                    fill: true, tension: 0.3, pointRadius: 0
+                }]
+            },
+            options: {plugins:{legend:{display:false}}, scales:{x:{display:false},y:{grid:{color:'#374151'}}}}
+        });
+    }
+
+    // Monthly
+    if (data.monthly_pnl.length > 0) {
+        new Chart(document.getElementById('monthly-chart'), {
+            type: 'bar',
+            data: {
+                labels: data.monthly_pnl.map(p => p.month),
+                datasets: [{
+                    data: data.monthly_pnl.map(p => p.pnl),
+                    backgroundColor: data.monthly_pnl.map(p => p.pnl >= 0 ? '#22c55e' : '#ef4444')
+                }]
+            },
+            options: {plugins:{legend:{display:false}}, scales:{y:{grid:{color:'#374151'}}}}
+        });
+    }
+
+    // Daily
+    if (data.daily_pnl.length > 0) {
+        new Chart(document.getElementById('daily-chart'), {
+            type: 'bar',
+            data: {
+                labels: data.daily_pnl.map(p => p.day.slice(5)),
+                datasets: [{
+                    data: data.daily_pnl.map(p => p.pnl),
+                    backgroundColor: data.daily_pnl.map(p => p.pnl >= 0 ? '#22c55e' : '#ef4444')
+                }]
+            },
+            options: {plugins:{legend:{display:false}}, scales:{y:{grid:{color:'#374151'}}}}
+        });
+    }
+
+    // Win/Loss pie
+    new Chart(document.getElementById('winloss-chart'), {
+        type: 'doughnut',
+        data: {
+            labels: ['Wins', 'Losses'],
+            datasets: [{
+                data: [data.win_rate, data.loss_rate],
+                backgroundColor: ['#22c55e', '#ef4444']
+            }]
+        },
+        options: {plugins:{legend:{position:'bottom'}}}
+    });
+}
+loadAnalytics();
+</script>
+{% endblock %}

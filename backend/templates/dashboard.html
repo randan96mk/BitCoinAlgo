@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% set active = "dashboard" %}
+{% block title %}Dashboard - BTC Trading Alerts{% endblock %}
+{% block content %}
+<div class="space-y-6">
+    <h1 class="text-2xl font-bold">Dashboard</h1>
+
+    <div id="status-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-xs text-gray-400 uppercase">Status</div>
+            <div id="engine-status" class="text-lg font-semibold mt-1 text-yellow-400">Loading...</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-xs text-gray-400 uppercase">BTC Price</div>
+            <div id="current-price" class="text-lg font-semibold mt-1">--</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-xs text-gray-400 uppercase">Exchange</div>
+            <div id="exchange-name" class="text-lg font-semibold mt-1">--</div>
+        </div>
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <div class="text-xs text-gray-400 uppercase">Timeframe</div>
+            <div id="timeframe" class="text-lg font-semibold mt-1">--</div>
+        </div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <h2 class="text-lg font-semibold mb-4">Last Signal</h2>
+        <div id="last-signal" class="text-gray-400">No signals yet</div>
+    </div>
+
+    <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+        <h2 class="text-lg font-semibold mb-4">Recent Signals</h2>
+        <div id="recent-signals" class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="text-gray-400 border-b border-gray-700">
+                    <tr>
+                        <th class="text-left py-2">Time</th>
+                        <th class="text-left py-2">Direction</th>
+                        <th class="text-right py-2">Entry</th>
+                        <th class="text-right py-2">SL</th>
+                        <th class="text-right py-2">TP3</th>
+                        <th class="text-right py-2">Score</th>
+                        <th class="text-right py-2">PnL</th>
+                    </tr>
+                </thead>
+                <tbody id="signals-body" class="divide-y divide-gray-700"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+async function updateDashboard() {
+    try {
+        const status = await fetchJSON('/api/status');
+        document.getElementById('engine-status').textContent = status.status;
+        document.getElementById('engine-status').className =
+            status.status === 'running' ? 'text-lg font-semibold mt-1 text-green-400' :
+            'text-lg font-semibold mt-1 text-yellow-400';
+        document.getElementById('current-price').textContent =
+            status.current_price ? '$' + Number(status.current_price).toLocaleString() : '--';
+        document.getElementById('exchange-name').textContent = status.exchange || '--';
+        document.getElementById('timeframe').textContent = status.timeframe || '--';
+
+        if (status.last_signal) {
+            const s = status.last_signal;
+            document.getElementById('last-signal').innerHTML =
+                `<span class="${s.type === 'long' ? 'text-green-400' : 'text-red-400'} font-bold">
+                ${s.type.toUpperCase()}</span> @ $${s.entry?.toLocaleString()} |
+                SL: $${s.sl?.toLocaleString()} | TP: $${s.tp3?.toLocaleString()} |
+                Score: ${s.score}% | Regime: ${s.regime}`;
+        }
+
+        const signals = await fetchJSON('/api/signals?limit=10');
+        const tbody = document.getElementById('signals-body');
+        tbody.innerHTML = signals.signals.map(s => `
+            <tr>
+                <td class="py-2">${s.timestamp ? new Date(s.timestamp).toLocaleString() : '--'}</td>
+                <td class="py-2">
+                    <span class="px-2 py-1 rounded text-xs font-bold
+                        ${s.direction === 'long' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}">
+                        ${s.direction?.toUpperCase()}
+                    </span>
+                </td>
+                <td class="py-2 text-right">$${s.entry_price?.toLocaleString() || '--'}</td>
+                <td class="py-2 text-right">$${s.stop_loss?.toLocaleString() || '--'}</td>
+                <td class="py-2 text-right">$${s.tp3?.toLocaleString() || '--'}</td>
+                <td class="py-2 text-right">${s.score || '--'}%</td>
+                <td class="py-2 text-right ${s.pnl > 0 ? 'text-green-400' : s.pnl < 0 ? 'text-red-400' : ''}">
+                    ${s.pnl != null ? s.pnl.toFixed(2) : '--'}
+                </td>
+            </tr>
+        `).join('');
+    } catch(e) { console.error(e); }
+}
+updateDashboard();
+setInterval(updateDashboard, 10000);
+</script>
+{% endblock %}

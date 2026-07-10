@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}BTC Trading Alerts{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.12"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, sans-serif; }
+        .pulse { animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <nav class="bg-gray-800 border-b border-gray-700 px-6 py-3">
+        <div class="flex items-center justify-between max-w-7xl mx-auto">
+            <div class="flex items-center space-x-2">
+                <span class="text-xl font-bold text-blue-400">&#8383;</span>
+                <span class="text-lg font-semibold">BTC Trading Alerts</span>
+            </div>
+            <div class="flex space-x-6 text-sm">
+                <a href="/" class="hover:text-blue-400 {% if active == 'dashboard' %}text-blue-400{% endif %}">Dashboard</a>
+                <a href="/signals" class="hover:text-blue-400 {% if active == 'signals' %}text-blue-400{% endif %}">Signals</a>
+                <a href="/analytics" class="hover:text-blue-400 {% if active == 'analytics' %}text-blue-400{% endif %}">Analytics</a>
+                <a href="/settings" class="hover:text-blue-400 {% if active == 'settings' %}text-blue-400{% endif %}">Settings</a>
+            </div>
+        </div>
+    </nav>
+    <main class="max-w-7xl mx-auto px-6 py-8">
+        {% block content %}{% endblock %}
+    </main>
+    <script>
+        async function fetchJSON(url) {
+            const r = await fetch(url);
+            return r.json();
+        }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>
