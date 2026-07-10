@@ -48,17 +48,25 @@ class CardwellRSIStrategy:
         self.tp1_mult = cfg.get("strategy.tp1_atr_mult", 1.0)
         self.tp2_mult = cfg.get("strategy.tp2_atr_mult", 2.0)
         self.tp3_mult = cfg.get("strategy.tp3_atr_mult", 3.0)
-        self._prev_regime = 0
+        # Per-bar state — only updated when a NEW bar is seen
         self._bull_confirm_count = 0
         self._bear_confirm_count = 0
+        self._prev_regime = 0
+        self._last_bar_time = None
 
     def evaluate(self, df: pd.DataFrame, htf_df: Optional[pd.DataFrame] = None) -> SignalResult:
         """
         Evaluate strategy on OHLCV DataFrame.
         df must have columns: open, high, low, close, volume, timestamp
-        Returns SignalResult for the latest confirmed candle.
+        Returns SignalResult for the latest confirmed bar.
+
+        Pine Script equivalence:
+          - df[-1] = current forming bar (unconfirmed)
+          - df[-2] = idx = last confirmed bar = Pine's "current bar" at barstate.isconfirmed
+          - df[-3] = idx-1 = Pine's [1] reference (close[1] for entry)
         """
-        if len(df) < max(self.rsi_len, self.trend_ma_len, self.atr_len, self.adx_len) + 5:
+        min_bars = max(self.rsi_len, self.trend_ma_len, self.atr_len, self.adx_len) + 5
+        if len(df) < min_bars:
             return SignalResult()
 
         close = df["close"]
@@ -70,14 +78,14 @@ class CardwellRSIStrategy:
         atr_val = atr(high, low, close, self.atr_len)
         adx_val = adx(high, low, close, self.adx_len)
 
-        idx = len(df) - 2  # previous confirmed candle (like barstate.isconfirmed)
+        # idx = last confirmed bar (Pine's "current bar" when barstate.isconfirmed)
+        idx = len(df) - 2
 
         cur_rsi = rsi_val.iloc[idx]
         cur_trend_ma = trend_ma.iloc[idx]
         cur_close = close.iloc[idx]
         cur_atr = atr_val.iloc[idx]
         cur_adx = adx_val.iloc[idx]
-        entry = close.iloc[idx]
 
         is_uptrend = cur_close > cur_trend_ma
         is_downtrend = cur_close < cur_trend_ma
@@ -88,6 +96,23 @@ class CardwellRSIStrategy:
         bull_regime_raw = is_uptrend and in_bull_range
         bear_regime_raw = is_downtrend and in_bear_range
 
+        # Always return current indicator values
+        result = SignalResult(
+            rsi_value=round(float(cur_rsi), 2),
+            adx_value=round(float(cur_adx), 2),
+            atr_value=round(float(cur_atr), 2),
+            trend_ma_value=round(float(cur_trend_ma), 2),
+            regime="bullish" if bull_regime_raw else ("bearish" if bear_regime_raw else "neutral"),
+            timestamp=df["timestamp"].iloc[idx] if "timestamp" in df.columns else None,
+        )
+
+        # Only evaluate signal logic on NEW bars (matches Pine's once-per-bar execution)
+        bar_time = df["timestamp"].iloc[idx] if "timestamp" in df.columns else idx
+        if bar_time == self._last_bar_time:
+            return result
+        self._last_bar_time = bar_time
+
+        # Confirm counters — increment once per bar (matches Pine: bullConfirmCount := bullRegimeRaw ? bullConfirmCount + 1 : 0)
         if bull_regime_raw:
             self._bull_confirm_count += 1
         else:
@@ -103,7 +128,10 @@ class CardwellRSIStrategy:
 
         regime_state = 1 if bull_regime else (-1 if bear_regime else 0)
 
-        # HTF confirmation
+        # Update regime label with confirmed state
+        result.regime = "bullish" if bull_regime else ("bearish" if bear_regime else "neutral")
+
+        # HTF confirmation (matches Pine: request.security with [1] lookback)
         htf_bull_ok = True
         htf_bear_ok = True
         if self.use_htf and htf_df is not None and len(htf_df) > self.trend_ma_len + 2:
@@ -113,26 +141,21 @@ class CardwellRSIStrategy:
             htf_bull_ok = htf_close.iloc[htf_idx] > htf_ma.iloc[htf_idx]
             htf_bear_ok = htf_close.iloc[htf_idx] < htf_ma.iloc[htf_idx]
 
-        # ADX / chop filter
+        # ADX chop filter (matches Pine: chopOk = not i_useAdx or adxVal >= i_adxMin)
         chop_ok = True
         if self.use_adx:
             chop_ok = cur_adx >= self.adx_min
 
+        # Signal detection — transition into regime (matches Pine: regimeState == 1 and prevRegimeState != 1)
         long_signal = regime_state == 1 and self._prev_regime != 1 and htf_bull_ok and chop_ok
         short_signal = regime_state == -1 and self._prev_regime != -1 and htf_bear_ok and chop_ok
 
+        # Update prev regime AFTER signal check (Pine: prevRegimeState = regimeState[1])
         self._prev_regime = regime_state
 
-        result = SignalResult(
-            rsi_value=round(cur_rsi, 2),
-            adx_value=round(cur_adx, 2),
-            atr_value=round(cur_atr, 2),
-            trend_ma_value=round(cur_trend_ma, 2),
-            regime="bullish" if bull_regime else ("bearish" if bear_regime else "neutral"),
-            timestamp=df["timestamp"].iloc[idx] if "timestamp" in df.columns else None,
-        )
-
         if long_signal:
+            # Pine: entryPrice = close[1] — previous bar's close
+            entry = close.iloc[idx - 1]
             result.signal_type = "long"
             result.entry_price = entry
             result.stop_loss = entry - cur_atr * self.sl_mult
@@ -141,6 +164,7 @@ class CardwellRSIStrategy:
             result.tp3 = entry + cur_atr * self.tp3_mult
             result.signal_score = self._calc_score(cur_rsi, cur_adx, is_uptrend, in_bull_range)
         elif short_signal:
+            entry = close.iloc[idx - 1]
             result.signal_type = "short"
             result.entry_price = entry
             result.stop_loss = entry + cur_atr * self.sl_mult

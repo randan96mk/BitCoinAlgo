@@ -1,12 +1,12 @@
 {% extends "base.html" %}
 {% set active = "dashboard" %}
 {% block title %}Terminal - BTC Trading Alerts{% endblock %}
-{% block main_class %}p-2{% endblock %}
+{% block main_class %}p-1{% endblock %}
 {% block content %}
-<div class="grid grid-cols-12 gap-2" style="height:calc(100vh - 52px);">
+<div class="grid grid-cols-12 gap-2" style="height:calc(100vh - 48px);overflow:hidden;">
 
     <!-- ═══ LEFT SIDEBAR: Ticker + Indicators + Trade Levels ═══ -->
-    <div class="col-span-2 flex flex-col gap-2 overflow-y-auto scrollbar-thin">
+    <div class="col-span-2 flex flex-col gap-2 overflow-y-auto scrollbar-thin" style="max-height:calc(100vh - 48px);">
 
         <!-- Ticker -->
         <div class="bg-surface rounded-lg p-3 border border-border">
@@ -81,7 +81,7 @@
     </div>
 
     <!-- ═══ CENTER: Chart + RSI + Quick Stats ═══ -->
-    <div class="col-span-8 flex flex-col gap-2">
+    <div class="col-span-8 flex flex-col gap-2" style="max-height:calc(100vh - 48px);overflow:hidden;">
 
         <!-- Chart toolbar -->
         <div class="bg-surface rounded-lg px-3 py-1.5 border border-border flex items-center justify-between">
@@ -135,7 +135,7 @@
     </div>
 
     <!-- ═══ RIGHT SIDEBAR: Signals + Order Book Style ═══ -->
-    <div class="col-span-2 flex flex-col gap-2 overflow-y-auto scrollbar-thin">
+    <div class="col-span-2 flex flex-col gap-2 overflow-y-auto scrollbar-thin" style="max-height:calc(100vh - 48px);">
 
         <!-- Last Signal Alert -->
         <div id="last-signal-card" class="bg-surface rounded-lg p-3 border border-border">
