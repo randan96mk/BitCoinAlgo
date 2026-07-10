@@ -1,0 +1,49 @@
+{
+  "exchange": {
+    "name": "binance",
+    "symbol": "BTC/USDT",
+    "type": "future"
+  },
+  "strategy": {
+    "timeframe": "3m",
+    "rsi_length": 14,
+    "rsi_source": "close",
+    "trend_ma_length": 50,
+    "trend_source": "close",
+    "bull_range_low": 40,
+    "bull_range_high": 80,
+    "bear_range_low": 20,
+    "bear_range_high": 60,
+    "confirm_bars": 2,
+    "use_htf": true,
+    "htf_timeframe": "240",
+    "use_adx_filter": true,
+    "adx_length": 14,
+    "adx_min_strength": 20,
+    "atr_length": 14,
+    "sl_atr_mult": 1.5,
+    "tp1_atr_mult": 1.0,
+    "tp2_atr_mult": 2.0,
+    "tp3_atr_mult": 3.0
+  },
+  "risk": {
+    "position_size": 100,
+    "stop_loss_pct": 1.5,
+    "take_profit_pct": 3.0,
+    "risk_pct": 1.0
+  },
+  "telegram": {
+    "bot_token": "",
+    "chat_id": "",
+    "enabled": false
+  },
+  "server": {
+    "host": "0.0.0.0",
+    "port": 8000,
+    "refresh_interval": 10
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "logs/trading.log"
+  }
+}
