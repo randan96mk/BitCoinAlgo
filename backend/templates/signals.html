@@ -2,16 +2,16 @@
 {% set active = "signals" %}
 {% block title %}Signal History - BTC Trading Alerts{% endblock %}
 {% block content %}
-<div class="space-y-6">
+<div class="space-y-3">
     <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-bold">Signal History</h1>
-        <div class="flex space-x-2">
-            <select id="filter-dir" class="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-sm">
+        <h1 class="text-lg font-bold">Signal History</h1>
+        <div class="flex items-center gap-2 text-xs">
+            <select id="filter-dir" class="bg-surface border border-border rounded px-2.5 py-1.5">
                 <option value="">All Directions</option>
-                <option value="long">Long</option>
-                <option value="short">Short</option>
+                <option value="long">Long Only</option>
+                <option value="short">Short Only</option>
             </select>
-            <select id="filter-status" class="bg-gray-800 border border-gray-600 rounded px-3 py-1 text-sm">
+            <select id="filter-status" class="bg-surface border border-border rounded px-2.5 py-1.5">
                 <option value="">All Status</option>
                 <option value="true">Closed</option>
                 <option value="false">Open</option>
@@ -19,31 +19,33 @@
         </div>
     </div>
 
-    <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-x-auto">
-        <table class="w-full text-sm">
-            <thead class="text-gray-400 border-b border-gray-700 bg-gray-750">
+    <div class="bg-surface rounded-lg border border-border overflow-x-auto">
+        <table class="w-full text-xs">
+            <thead class="text-muted border-b border-border bg-card">
                 <tr>
-                    <th class="text-left px-4 py-3">Date</th>
-                    <th class="text-left px-4 py-3">Dir</th>
-                    <th class="text-right px-4 py-3">Entry</th>
-                    <th class="text-right px-4 py-3">Exit</th>
-                    <th class="text-right px-4 py-3">SL</th>
-                    <th class="text-right px-4 py-3">TP1</th>
-                    <th class="text-right px-4 py-3">TP3</th>
-                    <th class="text-right px-4 py-3">PnL</th>
-                    <th class="text-center px-4 py-3">W/L</th>
-                    <th class="text-right px-4 py-3">Duration</th>
-                    <th class="text-left px-4 py-3">Reason</th>
+                    <th class="text-left px-3 py-2.5">Date</th>
+                    <th class="text-left px-3 py-2.5">Dir</th>
+                    <th class="text-right px-3 py-2.5">Entry</th>
+                    <th class="text-right px-3 py-2.5">Exit</th>
+                    <th class="text-right px-3 py-2.5">SL</th>
+                    <th class="text-right px-3 py-2.5">TP1</th>
+                    <th class="text-right px-3 py-2.5">TP3</th>
+                    <th class="text-right px-3 py-2.5">PnL</th>
+                    <th class="text-right px-3 py-2.5">PnL %</th>
+                    <th class="text-center px-3 py-2.5">Result</th>
+                    <th class="text-right px-3 py-2.5">Duration</th>
+                    <th class="text-center px-3 py-2.5">Score</th>
+                    <th class="text-left px-3 py-2.5">Reason</th>
                 </tr>
             </thead>
-            <tbody id="history-body" class="divide-y divide-gray-700"></tbody>
+            <tbody id="history-body" class="divide-y divide-border/50"></tbody>
         </table>
     </div>
-    <div class="flex justify-between items-center">
-        <span id="total-count" class="text-sm text-gray-400"></span>
+    <div class="flex justify-between items-center text-xs">
+        <span id="total-count" class="text-muted"></span>
         <div class="space-x-2">
-            <button id="prev-btn" class="px-3 py-1 bg-gray-700 rounded text-sm disabled:opacity-50">Prev</button>
-            <button id="next-btn" class="px-3 py-1 bg-gray-700 rounded text-sm disabled:opacity-50">Next</button>
+            <button id="prev-btn" class="px-3 py-1.5 bg-card border border-border rounded disabled:opacity-30 hover:bg-surface transition">Prev</button>
+            <button id="next-btn" class="px-3 py-1.5 bg-card border border-border rounded disabled:opacity-30 hover:bg-surface transition">Next</button>
         </div>
     </div>
 </div>
@@ -51,7 +53,7 @@
 {% block scripts %}
 <script>
 let offset = 0;
-const limit = 25;
+const limit = 30;
 
 async function loadSignals() {
     const dir = document.getElementById('filter-dir').value;
@@ -61,32 +63,39 @@ async function loadSignals() {
     if (status) url += `&is_closed=${status}`;
 
     const data = await fetchJSON(url);
-    document.getElementById('total-count').textContent = `${data.total} signals total`;
+    if (!data) return;
+    document.getElementById('total-count').textContent = `${data.total} signals`;
     document.getElementById('prev-btn').disabled = offset === 0;
     document.getElementById('next-btn').disabled = offset + limit >= data.total;
 
     document.getElementById('history-body').innerHTML = data.signals.map(s => `
-        <tr class="hover:bg-gray-750">
-            <td class="px-4 py-2">${s.timestamp ? new Date(s.timestamp).toLocaleString() : '--'}</td>
-            <td class="px-4 py-2">
-                <span class="px-2 py-1 rounded text-xs font-bold
-                    ${s.direction === 'long' ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}">
+        <tr class="hover:bg-card/50 transition">
+            <td class="px-3 py-2 text-muted">${s.timestamp ? new Date(s.timestamp).toLocaleString() : '--'}</td>
+            <td class="px-3 py-2">
+                <span class="px-1.5 py-0.5 rounded text-[10px] font-bold
+                    ${s.direction === 'long' ? 'bg-green-900/60 text-profit' : 'bg-red-900/60 text-loss'}">
                     ${s.direction?.toUpperCase()}
                 </span>
             </td>
-            <td class="px-4 py-2 text-right">${s.entry_price?.toFixed(2) || '--'}</td>
-            <td class="px-4 py-2 text-right">${s.exit_price?.toFixed(2) || '--'}</td>
-            <td class="px-4 py-2 text-right">${s.stop_loss?.toFixed(2) || '--'}</td>
-            <td class="px-4 py-2 text-right">${s.tp1?.toFixed(2) || '--'}</td>
-            <td class="px-4 py-2 text-right">${s.tp3?.toFixed(2) || '--'}</td>
-            <td class="px-4 py-2 text-right ${s.pnl > 0 ? 'text-green-400' : s.pnl < 0 ? 'text-red-400' : ''}">
-                ${s.pnl != null ? s.pnl.toFixed(2) : '--'}
+            <td class="px-3 py-2 text-right font-mono">${s.entry_price?.toFixed(2) || '--'}</td>
+            <td class="px-3 py-2 text-right font-mono">${s.exit_price?.toFixed(2) || '--'}</td>
+            <td class="px-3 py-2 text-right font-mono text-loss">${s.stop_loss?.toFixed(2) || '--'}</td>
+            <td class="px-3 py-2 text-right font-mono text-profit">${s.tp1?.toFixed(2) || '--'}</td>
+            <td class="px-3 py-2 text-right font-mono text-profit">${s.tp3?.toFixed(2) || '--'}</td>
+            <td class="px-3 py-2 text-right font-mono font-medium ${s.pnl > 0 ? 'text-profit' : s.pnl < 0 ? 'text-loss' : ''}">
+                ${s.pnl != null ? (s.pnl > 0 ? '+' : '') + s.pnl.toFixed(2) : '--'}
             </td>
-            <td class="px-4 py-2 text-center">
-                ${s.is_closed ? (s.is_winner ? '<span class="text-green-400">W</span>' : '<span class="text-red-400">L</span>') : '<span class="text-yellow-400">Open</span>'}
+            <td class="px-3 py-2 text-right font-mono ${s.pnl_pct > 0 ? 'text-profit' : s.pnl_pct < 0 ? 'text-loss' : ''}">
+                ${s.pnl_pct != null ? (s.pnl_pct > 0 ? '+' : '') + s.pnl_pct.toFixed(2) + '%' : '--'}
             </td>
-            <td class="px-4 py-2 text-right">${s.duration_min ? s.duration_min + 'm' : '--'}</td>
-            <td class="px-4 py-2">${s.exit_reason || '--'}</td>
+            <td class="px-3 py-2 text-center">
+                ${s.is_closed
+                    ? `<span class="text-[10px] px-1.5 py-0.5 rounded font-bold ${s.is_winner ? 'bg-green-900/60 text-profit' : 'bg-red-900/60 text-loss'}">${s.is_winner ? 'WIN' : 'LOSS'}</span>`
+                    : '<span class="text-[10px] px-1.5 py-0.5 rounded bg-blue-900/50 text-blue-400">OPEN</span>'}
+            </td>
+            <td class="px-3 py-2 text-right font-mono text-muted">${s.duration_min ? s.duration_min + 'm' : '--'}</td>
+            <td class="px-3 py-2 text-center font-mono">${s.score ? s.score + '%' : '--'}</td>
+            <td class="px-3 py-2 text-muted">${s.exit_reason || '--'}</td>
         </tr>
     `).join('');
 }
