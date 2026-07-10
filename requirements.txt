@@ -1,7 +1,7 @@
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
 sqlalchemy==2.0.36
-ccxt==4.4.54
+ccxt>=4.4.0
 pandas==2.2.3
 numpy==2.2.1
 httpx==0.28.1
