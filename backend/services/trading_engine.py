@@ -91,7 +91,13 @@ class TradingEngine:
                         self._status = "running"
                 continue
 
-            await asyncio.sleep(interval)
+            # Align next tick to just after the next bar close so signals
+            # fire within seconds of the candle completing (like TradingView),
+            # not up to a full interval late.
+            import time as _time
+            now = _time.time()
+            sleep_s = interval - (now % interval) + 3
+            await asyncio.sleep(sleep_s)
 
     async def _tick(self):
         df = await self.feed.fetch_candles()
