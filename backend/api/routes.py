@@ -93,6 +93,85 @@ async def get_analytics():
         session.close()
 
 
+@router.get("/chart/candles")
+async def get_chart_candles(timeframe: Optional[str] = Query(None), limit: int = Query(200)):
+    from backend.main import engine_instance
+    if not engine_instance or not engine_instance.feed.is_connected:
+        return {"candles": [], "sma50": [], "sma20": [], "rsi": [], "volumes": []}
+
+    tf = timeframe or Config().get("strategy.timeframe", "3m")
+    try:
+        df = await engine_instance.feed.fetch_candles(tf, limit)
+    except Exception:
+        return {"candles": [], "sma50": [], "sma20": [], "rsi": [], "volumes": []}
+
+    from backend.indicators.technical import sma as calc_sma, rsi as calc_rsi
+
+    close = df["close"]
+    sma20 = calc_sma(close, 20)
+    sma50 = calc_sma(close, 50)
+    rsi_vals = calc_rsi(close, 14)
+
+    candles = []
+    sma20_data = []
+    sma50_data = []
+    rsi_data = []
+    vol_data = []
+
+    for i, row in df.iterrows():
+        t = int(row["timestamp"].timestamp())
+        candles.append({"time": t, "open": row["open"], "high": row["high"], "low": row["low"], "close": row["close"]})
+        vol_data.append({"time": t, "value": row["volume"], "color": "rgba(38,166,154,0.4)" if row["close"] >= row["open"] else "rgba(239,83,80,0.4)"})
+        if not _isnan(sma20.iloc[i]):
+            sma20_data.append({"time": t, "value": round(sma20.iloc[i], 2)})
+        if not _isnan(sma50.iloc[i]):
+            sma50_data.append({"time": t, "value": round(sma50.iloc[i], 2)})
+        if not _isnan(rsi_vals.iloc[i]):
+            rsi_data.append({"time": t, "value": round(rsi_vals.iloc[i], 2)})
+
+    session = _get_db()
+    try:
+        signals = session.query(Signal).order_by(desc(Signal.timestamp)).limit(50).all()
+        markers = []
+        for s in signals:
+            if s.entry_time:
+                t = int(s.entry_time.timestamp())
+                if s.direction == "long":
+                    markers.append({"time": t, "position": "belowBar", "color": "#2196f3", "shape": "arrowUp", "text": f"BUY {s.entry_price:.0f}"})
+                else:
+                    markers.append({"time": t, "position": "aboveBar", "color": "#ff9800", "shape": "arrowDown", "text": f"SELL {s.entry_price:.0f}"})
+            if s.exit_time and s.is_closed:
+                t = int(s.exit_time.timestamp())
+                color = "#26a69a" if s.is_winner else "#ef5350"
+                markers.append({"time": t, "position": "belowBar" if s.direction == "short" else "aboveBar", "color": color, "shape": "circle", "text": f"EXIT {s.exit_price:.0f}"})
+
+        trade_levels = []
+        open_trades = session.query(Signal).filter(Signal.is_closed == False).all()
+        for s in open_trades:
+            trade_levels.append({
+                "entry": s.entry_price, "sl": s.stop_loss,
+                "tp1": s.take_profit_1, "tp2": s.take_profit_2, "tp3": s.take_profit_3,
+                "direction": s.direction,
+            })
+    finally:
+        session.close()
+
+    return {
+        "candles": candles, "sma20": sma20_data, "sma50": sma50_data,
+        "rsi": rsi_data, "volumes": vol_data,
+        "markers": sorted(markers, key=lambda x: x["time"]),
+        "trade_levels": trade_levels,
+    }
+
+
+def _isnan(v) -> bool:
+    try:
+        import math
+        return math.isnan(v)
+    except (TypeError, ValueError):
+        return True
+
+
 @router.get("/config")
 async def get_config():
     return Config().all()

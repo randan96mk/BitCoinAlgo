@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+{% set active = "chart" %}
+{% block title %}Live Chart - BTC Trading Alerts{% endblock %}
+{% block content %}
+<div class="space-y-4">
+    <!-- Header bar -->
+    <div class="flex items-center justify-between">
+        <div class="flex items-center space-x-4">
+            <h1 class="text-2xl font-bold">BTCUSDT</h1>
+            <span id="live-price" class="text-2xl font-mono text-green-400">--</span>
+            <span id="price-change" class="text-sm px-2 py-1 rounded"></span>
+        </div>
+        <div class="flex items-center space-x-2">
+            <div class="flex bg-gray-800 rounded border border-gray-700 text-sm">
+                <button data-tf="1m" class="tf-btn px-3 py-1.5 hover:bg-gray-700 rounded-l">1m</button>
+                <button data-tf="3m" class="tf-btn px-3 py-1.5 hover:bg-gray-700 bg-blue-600">3m</button>
+                <button data-tf="5m" class="tf-btn px-3 py-1.5 hover:bg-gray-700">5m</button>
+                <button data-tf="15m" class="tf-btn px-3 py-1.5 hover:bg-gray-700">15m</button>
+                <button data-tf="30m" class="tf-btn px-3 py-1.5 hover:bg-gray-700">30m</button>
+                <button data-tf="1h" class="tf-btn px-3 py-1.5 hover:bg-gray-700 rounded-r">1H</button>
+            </div>
+            <div class="flex bg-gray-800 rounded border border-gray-700 text-sm">
+                <button id="toggle-sma" class="ind-btn px-3 py-1.5 hover:bg-gray-700 rounded-l bg-blue-600" data-active="true">SMA</button>
+                <button id="toggle-vol" class="ind-btn px-3 py-1.5 hover:bg-gray-700 bg-blue-600" data-active="true">Vol</button>
+                <button id="toggle-rsi" class="ind-btn px-3 py-1.5 hover:bg-gray-700 rounded-r bg-blue-600" data-active="true">RSI</button>
+            </div>
+            <div id="regime-badge" class="px-3 py-1.5 rounded text-sm font-bold bg-gray-700">--</div>
+        </div>
+    </div>
+
+    <!-- Main chart -->
+    <div class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <div id="chart-container" style="height:500px;width:100%;"></div>
+    </div>
+
+    <!-- RSI chart -->
+    <div id="rsi-wrapper" class="bg-gray-800 rounded-lg border border-gray-700 overflow-hidden">
+        <div id="rsi-container" style="height:150px;width:100%;"></div>
+    </div>
+
+    <!-- Info panels -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <!-- Active trade levels -->
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Active Trade Levels</h3>
+            <div id="trade-levels" class="space-y-2 text-sm">
+                <div class="text-gray-500">No active trades</div>
+            </div>
+        </div>
+        <!-- Signal log -->
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Recent Signals</h3>
+            <div id="signal-log" class="space-y-1 text-sm max-h-48 overflow-y-auto"></div>
+        </div>
+        <!-- Indicators -->
+        <div class="bg-gray-800 rounded-lg p-4 border border-gray-700">
+            <h3 class="text-sm font-semibold text-gray-400 mb-3">Indicators</h3>
+            <div id="indicator-panel" class="space-y-2 text-sm">
+                <div class="flex justify-between"><span class="text-gray-400">RSI (14)</span><span id="ind-rsi">--</span></div>
+                <div class="flex justify-between"><span class="text-gray-400">SMA 20</span><span id="ind-sma20">--</span></div>
+                <div class="flex justify-between"><span class="text-gray-400">SMA 50</span><span id="ind-sma50">--</span></div>
+                <div class="flex justify-between"><span class="text-gray-400">ADX</span><span id="ind-adx">--</span></div>
+                <div class="flex justify-between"><span class="text-gray-400">Regime</span><span id="ind-regime">--</span></div>
+                <div class="flex justify-between"><span class="text-gray-400">Trend</span><span id="ind-trend">--</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
+<script>
+const chartEl = document.getElementById('chart-container');
+const rsiEl = document.getElementById('rsi-container');
+
+const chartOptions = {
+    layout: { background: { color: '#1f2937' }, textColor: '#9ca3af' },
+    grid: { vertLines: { color: '#374151' }, horzLines: { color: '#374151' } },
+    crosshair: { mode: LightweightCharts.CrosshairMode.Normal },
+    rightPriceScale: { borderColor: '#4b5563' },
+    timeScale: { borderColor: '#4b5563', timeVisible: true, secondsVisible: false },
+    handleScale: { axisPressedMouseMove: { time: true, price: true } },
+};
+
+const chart = LightweightCharts.createChart(chartEl, chartOptions);
+const candleSeries = chart.addCandlestickSeries({
+    upColor: '#26a69a', downColor: '#ef5350', borderDownColor: '#ef5350',
+    borderUpColor: '#26a69a', wickUpColor: '#26a69a', wickDownColor: '#ef5350',
+});
+const volumeSeries = chart.addHistogramSeries({
+    priceFormat: { type: 'volume' },
+    priceScaleId: 'vol',
+});
+chart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+
+const sma20Series = chart.addLineSeries({ color: '#f59e0b', lineWidth: 1, title: 'SMA 20' });
+const sma50Series = chart.addLineSeries({ color: '#8b5cf6', lineWidth: 1, title: 'SMA 50' });
+
+// Trade level lines
+let tradeLevelLines = [];
+function clearTradeLines() {
+    tradeLevelLines.forEach(l => {
+        try { candleSeries.removePriceLine(l); } catch(e) {}
+    });
+    tradeLevelLines = [];
+}
+
+// RSI chart
+const rsiChart = LightweightCharts.createChart(rsiEl, {
+    ...chartOptions,
+    rightPriceScale: { ...chartOptions.rightPriceScale, scaleMargins: { top: 0.1, bottom: 0.1 } },
+});
+const rsiSeries = rsiChart.addLineSeries({ color: '#3b82f6', lineWidth: 1.5, title: 'RSI' });
+const rsiOB = rsiChart.addLineSeries({ color: 'rgba(239,83,80,0.3)', lineWidth: 1, lineStyle: 2 });
+const rsiOS = rsiChart.addLineSeries({ color: 'rgba(38,166,154,0.3)', lineWidth: 1, lineStyle: 2 });
+
+// Sync crosshair
+chart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+    if (range) rsiChart.timeScale().setVisibleLogicalRange(range);
+});
+rsiChart.timeScale().subscribeVisibleLogicalRangeChange(range => {
+    if (range) chart.timeScale().setVisibleLogicalRange(range);
+});
+
+let currentTF = '3m';
+let showSMA = true, showVol = true, showRSI = true;
+
+async function loadChart() {
+    const data = await fetchJSON(`/api/chart/candles?timeframe=${currentTF}&limit=300`);
+    if (!data.candles || data.candles.length === 0) return;
+
+    candleSeries.setData(data.candles);
+    if (showVol) volumeSeries.setData(data.volumes); else volumeSeries.setData([]);
+    if (showSMA) { sma20Series.setData(data.sma20); sma50Series.setData(data.sma50); }
+    else { sma20Series.setData([]); sma50Series.setData([]); }
+
+    if (data.markers && data.markers.length > 0) {
+        candleSeries.setMarkers(data.markers);
+    }
+
+    // RSI
+    if (showRSI && data.rsi.length > 0) {
+        rsiSeries.setData(data.rsi);
+        const obLine = data.rsi.map(d => ({time: d.time, value: 70}));
+        const osLine = data.rsi.map(d => ({time: d.time, value: 30}));
+        rsiOB.setData(obLine);
+        rsiOS.setData(osLine);
+        document.getElementById('rsi-wrapper').style.display = '';
+    } else {
+        document.getElementById('rsi-wrapper').style.display = showRSI ? '' : 'none';
+    }
+
+    // Trade levels
+    clearTradeLines();
+    if (data.trade_levels) {
+        data.trade_levels.forEach(tl => {
+            if (tl.entry) tradeLevelLines.push(candleSeries.createPriceLine({price: tl.entry, color: '#2196f3', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'Entry'}));
+            if (tl.sl) tradeLevelLines.push(candleSeries.createPriceLine({price: tl.sl, color: '#ef5350', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'SL'}));
+            if (tl.tp1) tradeLevelLines.push(candleSeries.createPriceLine({price: tl.tp1, color: 'rgba(38,166,154,0.5)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'TP1'}));
+            if (tl.tp2) tradeLevelLines.push(candleSeries.createPriceLine({price: tl.tp2, color: 'rgba(38,166,154,0.7)', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'TP2'}));
+            if (tl.tp3) tradeLevelLines.push(candleSeries.createPriceLine({price: tl.tp3, color: '#26a69a', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'TP3'}));
+        });
+    }
+
+    // Update indicator panel
+    const lastRsi = data.rsi.length > 0 ? data.rsi[data.rsi.length - 1].value : null;
+    const lastSma20 = data.sma20.length > 0 ? data.sma20[data.sma20.length - 1].value : null;
+    const lastSma50 = data.sma50.length > 0 ? data.sma50[data.sma50.length - 1].value : null;
+    const lastCandle = data.candles[data.candles.length - 1];
+
+    document.getElementById('ind-rsi').textContent = lastRsi != null ? lastRsi.toFixed(1) : '--';
+    document.getElementById('ind-rsi').className = lastRsi > 70 ? 'text-red-400' : lastRsi < 30 ? 'text-green-400' : 'text-white';
+    document.getElementById('ind-sma20').textContent = lastSma20 != null ? '$' + lastSma20.toLocaleString() : '--';
+    document.getElementById('ind-sma50').textContent = lastSma50 != null ? '$' + lastSma50.toLocaleString() : '--';
+
+    const trend = lastCandle && lastSma50 ? (lastCandle.close > lastSma50 ? 'UPTREND' : 'DOWNTREND') : '--';
+    const trendEl = document.getElementById('ind-trend');
+    trendEl.textContent = trend;
+    trendEl.className = trend === 'UPTREND' ? 'text-green-400' : trend === 'DOWNTREND' ? 'text-red-400' : '';
+
+    const regime = lastRsi >= 40 && lastRsi <= 80 && trend === 'UPTREND' ? 'BULLISH' :
+                   lastRsi >= 20 && lastRsi <= 60 && trend === 'DOWNTREND' ? 'BEARISH' : 'NEUTRAL';
+    document.getElementById('ind-regime').textContent = regime;
+    document.getElementById('ind-regime').className = regime === 'BULLISH' ? 'text-green-400' : regime === 'BEARISH' ? 'text-red-400' : 'text-gray-400';
+
+    const regimeBadge = document.getElementById('regime-badge');
+    regimeBadge.textContent = regime;
+    regimeBadge.className = `px-3 py-1.5 rounded text-sm font-bold ${regime === 'BULLISH' ? 'bg-green-900 text-green-300' : regime === 'BEARISH' ? 'bg-red-900 text-red-300' : 'bg-gray-700 text-gray-300'}`;
+
+    // Live price
+    const priceEl = document.getElementById('live-price');
+    priceEl.textContent = '$' + lastCandle.close.toLocaleString();
+    priceEl.className = 'text-2xl font-mono ' + (lastCandle.close >= lastCandle.open ? 'text-green-400' : 'text-red-400');
+
+    const prevCandle = data.candles.length > 1 ? data.candles[data.candles.length - 2] : lastCandle;
+    const changePct = ((lastCandle.close - prevCandle.close) / prevCandle.close * 100).toFixed(2);
+    const changeEl = document.getElementById('price-change');
+    changeEl.textContent = (changePct >= 0 ? '+' : '') + changePct + '%';
+    changeEl.className = `text-sm px-2 py-1 rounded ${changePct >= 0 ? 'bg-green-900 text-green-300' : 'bg-red-900 text-red-300'}`;
+
+    // Signal log
+    const signals = await fetchJSON('/api/signals?limit=8');
+    const logEl = document.getElementById('signal-log');
+    logEl.innerHTML = signals.signals.map(s => {
+        const icon = s.direction === 'long' ? '<span class="text-green-400">&#9650;</span>' : '<span class="text-red-400">&#9660;</span>';
+        const time = s.timestamp ? new Date(s.timestamp).toLocaleTimeString() : '';
+        const pnl = s.pnl != null ? `<span class="${s.pnl >= 0 ? 'text-green-400' : 'text-red-400'}">${s.pnl >= 0 ? '+' : ''}${s.pnl.toFixed(2)}</span>` : '';
+        return `<div class="flex justify-between items-center py-1 border-b border-gray-700">${icon} <span class="text-gray-400">${time}</span> <span>$${s.entry_price?.toFixed(0)}</span> ${pnl}</div>`;
+    }).join('');
+
+    // Trade levels panel
+    const levelsEl = document.getElementById('trade-levels');
+    if (data.trade_levels && data.trade_levels.length > 0) {
+        levelsEl.innerHTML = data.trade_levels.map(tl => `
+            <div class="space-y-1">
+                <div class="flex justify-between"><span class="text-gray-400">Direction</span><span class="${tl.direction === 'long' ? 'text-green-400' : 'text-red-400'} font-bold">${tl.direction.toUpperCase()}</span></div>
+                <div class="flex justify-between"><span class="text-blue-400">Entry</span><span>$${tl.entry?.toFixed(2)}</span></div>
+                <div class="flex justify-between"><span class="text-red-400">Stop Loss</span><span>$${tl.sl?.toFixed(2)}</span></div>
+                <div class="flex justify-between"><span class="text-green-400">TP1</span><span>$${tl.tp1?.toFixed(2)}</span></div>
+                <div class="flex justify-between"><span class="text-green-400">TP2</span><span>$${tl.tp2?.toFixed(2)}</span></div>
+                <div class="flex justify-between"><span class="text-green-400">TP3</span><span>$${tl.tp3?.toFixed(2)}</span></div>
+            </div>
+        `).join('<hr class="border-gray-700 my-2">');
+    } else {
+        levelsEl.innerHTML = '<div class="text-gray-500">No active trades</div>';
+    }
+}
+
+// Timeframe switcher
+document.querySelectorAll('.tf-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tf-btn').forEach(b => b.classList.remove('bg-blue-600'));
+        btn.classList.add('bg-blue-600');
+        currentTF = btn.dataset.tf;
+        loadChart();
+    });
+});
+
+// Indicator toggles
+function toggleInd(btn, callback) {
+    btn.addEventListener('click', () => {
+        const active = btn.dataset.active === 'true';
+        btn.dataset.active = !active;
+        btn.classList.toggle('bg-blue-600', !active);
+        btn.classList.toggle('bg-gray-700', active);
+        callback(!active);
+        loadChart();
+    });
+}
+toggleInd(document.getElementById('toggle-sma'), v => showSMA = v);
+toggleInd(document.getElementById('toggle-vol'), v => showVol = v);
+toggleInd(document.getElementById('toggle-rsi'), v => {
+    showRSI = v;
+    document.getElementById('rsi-wrapper').style.display = v ? '' : 'none';
+});
+
+// Responsive resize
+const resizeObserver = new ResizeObserver(() => {
+    chart.applyOptions({ width: chartEl.clientWidth });
+    rsiChart.applyOptions({ width: rsiEl.clientWidth });
+});
+resizeObserver.observe(chartEl);
+resizeObserver.observe(rsiEl);
+
+// Auto-refresh
+loadChart();
+setInterval(loadChart, 15000);
+</script>
+{% endblock %}
