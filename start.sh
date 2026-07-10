@@ -42,4 +42,13 @@ echo "🚀 Starting BTC Trading Alerts..."
 echo "   Dashboard: http://localhost:8000"
 echo "   Press Ctrl+C to stop"
 echo ""
+
+# Open browser once server is ready
+(
+    while ! curl -s http://localhost:8000 >/dev/null 2>&1; do
+        sleep 1
+    done
+    open http://localhost:8000
+) &
+
 python run.py
