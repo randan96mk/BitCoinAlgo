@@ -6,23 +6,40 @@ set -e
 
 cd "$(dirname "$0")"
 
-# Find Python 3
-if command -v python3 &>/dev/null; then
-    PY=python3
-elif command -v python &>/dev/null; then
-    PY=python
-else
-    echo "❌ Python 3 not found. Install it:"
-    echo "   brew install python"
+MIN_MAJOR=3
+MIN_MINOR=10
+
+version_ok() {
+    "$1" -c "import sys; sys.exit(0 if sys.version_info >= ($MIN_MAJOR, $MIN_MINOR) else 1)" 2>/dev/null
+}
+
+# Find the newest suitable Python (macOS system python3 is often 3.9 — too old)
+PY=""
+for cand in python3.14 python3.13 python3.12 python3.11 python3.10 python3 python; do
+    if command -v "$cand" &>/dev/null && version_ok "$cand"; then
+        PY="$cand"
+        break
+    fi
+done
+
+if [ -z "$PY" ]; then
+    echo "❌ Python ${MIN_MAJOR}.${MIN_MINOR}+ not found (system python3 is $(python3 --version 2>/dev/null || echo 'missing'))."
+    echo "   Install a newer Python:"
+    echo "   brew install python@3.12"
     exit 1
 fi
 
-echo "Using: $($PY --version)"
+echo "Using: $($PY --version) ($(command -v $PY))"
 
-# Create venv if missing
+# Recreate venv if it was built with an old Python
+if [ -d ".venv" ] && ! version_ok ".venv/bin/python"; then
+    echo "♻️  Existing venv uses an old Python — recreating..."
+    rm -rf .venv
+fi
+
 if [ ! -d ".venv" ]; then
     echo "📦 Creating virtual environment..."
-    $PY -m venv .venv
+    "$PY" -m venv .venv
 fi
 
 # Activate
