@@ -78,6 +78,14 @@ class TelegramNotifier:
                            pnl: float, pnl_pct: float,
                            reason: str) -> str:
         emoji = "✅" if pnl >= 0 else "❌"
+        reason_labels = {
+            "stop_loss": "Stop Loss",
+            "take_profit_1": "Take Profit 1",
+            "take_profit_2": "Take Profit 2",
+            "take_profit_3": "Take Profit 3",
+            "reversal": "Trend Reversal",
+        }
+        reason_label = reason_labels.get(reason, reason.replace("_", " ").title())
         return (
             f"{emoji} <b>Trade Closed</b>\n\n"
             f"<b>Pair:</b> {symbol}\n"
@@ -86,6 +94,6 @@ class TelegramNotifier:
             f"<b>Exit:</b> {exit_price:.2f}\n"
             f"<b>PnL:</b> {pnl:.2f} USDT\n"
             f"<b>Profit:</b> {pnl_pct:.2f}%\n"
-            f"<b>Reason:</b> {reason}\n\n"
+            f"<b>Reason:</b> {reason_label}\n\n"
             f"<b>Time:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
         )
