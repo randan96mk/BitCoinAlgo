@@ -12,7 +12,7 @@
         <div class="bg-surface rounded-lg p-3 border border-border">
             <div class="flex items-center justify-between mb-1">
                 <span class="text-xs text-muted font-medium">BTCUSDT PERP</span>
-                <span id="tf-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-card text-muted">3m</span>
+                <span id="tf-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-card text-muted">1m</span>
             </div>
             <div id="live-price" class="text-2xl font-mono font-bold text-profit">--</div>
             <div class="flex items-center gap-2 mt-1">
@@ -87,8 +87,8 @@
         <div class="bg-surface rounded-lg px-3 py-1.5 border border-border flex items-center justify-between">
             <div class="flex items-center gap-1">
                 <div class="flex bg-card rounded text-[11px] border border-border">
-                    <button data-tf="1m" class="tf-btn px-2.5 py-1 rounded-l hover:bg-gray-700 transition">1m</button>
-                    <button data-tf="3m" class="tf-btn px-2.5 py-1 hover:bg-gray-700 transition bg-blue-600/80 text-white">3m</button>
+                    <button data-tf="1m" class="tf-btn px-2.5 py-1 rounded-l hover:bg-gray-700 transition bg-blue-600/80 text-white">1m</button>
+                    <button data-tf="3m" class="tf-btn px-2.5 py-1 hover:bg-gray-700 transition">3m</button>
                     <button data-tf="5m" class="tf-btn px-2.5 py-1 hover:bg-gray-700 transition">5m</button>
                     <button data-tf="15m" class="tf-btn px-2.5 py-1 hover:bg-gray-700 transition">15m</button>
                     <button data-tf="30m" class="tf-btn px-2.5 py-1 hover:bg-gray-700 transition">30m</button>
@@ -209,7 +209,7 @@ rsiChart.timeScale().subscribeVisibleLogicalRangeChange(r => { if(r) chart.timeS
 let tradeLines = [];
 function clearTradeLines() { tradeLines.forEach(l => { try{candleSeries.removePriceLine(l)}catch(e){} }); tradeLines = []; }
 
-let currentTF = '3m', showSMA = true, showVol = true, showRSI = true;
+let currentTF = '1m', showSMA = true, showVol = true, showRSI = true;
 let knownSignalIds = new Set();
 let firstLoad = true;
 
@@ -230,6 +230,8 @@ async function loadAll() {
         stxt.textContent = status.status;
         document.getElementById('sess-exchange').textContent = status.exchange || '--';
         document.getElementById('tf-badge').textContent = status.timeframe || currentTF;
+        // Apply the configured refresh interval (clamped to a sane floor)
+        if (status.refresh_interval) applyRefreshInterval(status.refresh_interval);
     }
 
     // Chart
@@ -470,8 +472,19 @@ const ro = new ResizeObserver(() => {
 ro.observe(chartEl);
 ro.observe(rsiEl);
 
+// ── Refresh loop (interval driven by server config, min 3s) ──
+let refreshTimer = null;
+let refreshMs = 5000;
+function applyRefreshInterval(seconds) {
+    const ms = Math.max(3, Number(seconds) || 5) * 1000;
+    if (ms === refreshMs && refreshTimer) return;   // unchanged, keep timer
+    refreshMs = ms;
+    if (refreshTimer) clearInterval(refreshTimer);
+    refreshTimer = setInterval(loadAll, refreshMs);
+}
+
 // ── Go ──
 loadAll();
-setInterval(loadAll, 10000);
+applyRefreshInterval(5);
 </script>
 {% endblock %}

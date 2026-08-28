@@ -151,6 +151,9 @@ Every open position is checked on each tick against the current price:
 
 - Price hits the **stop-loss** → closed as a loss.
 - Price reaches **TP3 / TP2 / TP1** → closed at the highest target reached.
+- **Trend reversal** (`exit_on_reversal`, default on) → if an opposite signal
+  fires while a position is open, it is closed at market before the new entry
+  is taken (mirrors the Pine Script's close-long / close-short behaviour).
 
 The closed trade's PnL, PnL %, duration, and win/loss result are recorded and
 fed into the analytics.
@@ -171,17 +174,25 @@ All of these are editable in **Settings** (persisted to `config/user.json`):
 
 | Parameter | Default | Meaning |
 |-----------|---------|---------|
-| `timeframe` | `3m` | Candle timeframe the engine trades |
+| `timeframe` | `1m` | Candle timeframe the engine trades |
 | `rsi_length` | `14` | RSI lookback |
 | `trend_ma_length` | `50` | SMA length for the trend filter |
 | `bull_range_low` / `bull_range_high` | `40` / `80` | RSI bull range |
 | `bear_range_low` / `bear_range_high` | `20` / `60` | RSI bear range |
 | `confirm_bars` | `2` | Bars a regime must hold before confirming |
-| `use_htf` / `htf_timeframe` | `true` / `240` (4H) | Higher-timeframe confirmation |
+| `use_htf` / `htf_timeframe` | `true` / `15m` | Higher-timeframe confirmation |
 | `use_adx_filter` / `adx_min_strength` | `true` / `20` | Chop filter |
 | `atr_length` | `14` | ATR lookback for trade levels |
 | `sl_atr_mult` | `1.5` | Stop-loss distance (× ATR) |
 | `tp1/2/3_atr_mult` | `1.0 / 2.0 / 3.0` | Take-profit distances (× ATR) |
+| `exit_on_reversal` | `true` | Close a position when an opposite signal fires |
+
+> **Default profile — "1-Minute Intraday":** the engine ships tuned for 1m
+> entries with a **15m** higher-timeframe trend filter, 2-bar confirmation, the
+> ADX chop filter on, and reversal exits enabled. This gives fast entries while
+> keeping intraday discipline (it is deliberately *not* a hair-trigger scalping
+> setup). For slower swing trading, raise `timeframe` to `5m`/`15m` and
+> `htf_timeframe` to `1h`/`4h`.
 
 The engine replays the full candle history on every evaluation, so regime state
 is rebuilt from scratch each cycle — signals stay consistent even across server

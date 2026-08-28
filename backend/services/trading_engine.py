@@ -111,12 +111,16 @@ class TradingEngine:
         self._current_price = df["close"].iloc[-1]
         result = self.strategy.evaluate(df, htf_df)
 
-        # Check exits on open positions
+        # Check exits on open positions (stop-loss / take-profit)
         await self._check_exits()
 
         if result.signal_type:
             if self._is_duplicate(result):
                 return
+            # Reversal exit: an opposite signal closes any still-open position
+            # (mirrors the Pine Script's closelong/closeshort on opposite entry)
+            if self.config.get("strategy.exit_on_reversal", True):
+                await self._close_opposite_positions(result.signal_type)
             self._last_signal = result
             self._last_signal_time = datetime.now(timezone.utc)
             await self._record_signal(result)
@@ -160,6 +164,34 @@ class TradingEngine:
         finally:
             session.close()
 
+    async def _close_position(self, session, sig: Signal, exit_reason: str):
+        """Close an open position, compute PnL, persist, and alert."""
+        now = utcnow_naive()
+        sig.exit_price = self._current_price
+        sig.exit_time = now
+        sig.exit_reason = exit_reason
+        sig.is_closed = True
+
+        if sig.direction == "long":
+            sig.pnl = self._current_price - sig.entry_price
+        else:
+            sig.pnl = sig.entry_price - self._current_price
+
+        sig.pnl_pct = (sig.pnl / sig.entry_price) * 100 if sig.entry_price else 0
+        sig.is_winner = sig.pnl > 0
+
+        if sig.entry_time:
+            sig.duration_minutes = int((now - sig.entry_time).total_seconds() / 60)
+
+        session.commit()
+
+        msg = self.notifier.format_exit_signal(
+            sig.direction, sig.symbol, sig.entry_price,
+            self._current_price, sig.pnl, sig.pnl_pct, exit_reason
+        )
+        await self.notifier.send_message(msg)
+        logger.info(f"Exit: {sig.direction} {exit_reason} PnL={sig.pnl:.2f}")
+
     async def _check_exits(self):
         session = get_session(self.engine)
         try:
@@ -170,31 +202,20 @@ class TradingEngine:
             for sig in open_signals:
                 exit_reason = self.strategy.check_exit(sig, self._current_price)
                 if exit_reason:
-                    now = utcnow_naive()
-                    sig.exit_price = self._current_price
-                    sig.exit_time = now
-                    sig.exit_reason = exit_reason
-                    sig.is_closed = True
+                    await self._close_position(session, sig, exit_reason)
+        finally:
+            session.close()
 
-                    if sig.direction == "long":
-                        sig.pnl = self._current_price - sig.entry_price
-                    else:
-                        sig.pnl = sig.entry_price - self._current_price
-
-                    sig.pnl_pct = (sig.pnl / sig.entry_price) * 100 if sig.entry_price else 0
-                    sig.is_winner = sig.pnl > 0
-
-                    if sig.entry_time:
-                        sig.duration_minutes = int((now - sig.entry_time).total_seconds() / 60)
-
-                    session.commit()
-
-                    msg = self.notifier.format_exit_signal(
-                        sig.direction, sig.symbol, sig.entry_price,
-                        self._current_price, sig.pnl, sig.pnl_pct, exit_reason
-                    )
-                    await self.notifier.send_message(msg)
-                    logger.info(f"Exit: {sig.direction} {exit_reason} PnL={sig.pnl:.2f}")
+    async def _close_opposite_positions(self, new_direction: str):
+        """Close open positions that oppose a freshly fired signal (reversal exit)."""
+        session = get_session(self.engine)
+        try:
+            open_signals = session.query(Signal).filter(
+                Signal.is_closed == False,
+                Signal.direction != new_direction,
+            ).all()
+            for sig in open_signals:
+                await self._close_position(session, sig, "reversal")
         finally:
             session.close()
 

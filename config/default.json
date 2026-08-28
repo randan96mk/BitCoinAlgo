@@ -5,7 +5,7 @@
     "type": "future"
   },
   "strategy": {
-    "timeframe": "3m",
+    "timeframe": "1m",
     "rsi_length": 14,
     "rsi_source": "close",
     "trend_ma_length": 50,
@@ -16,7 +16,7 @@
     "bear_range_high": 60,
     "confirm_bars": 2,
     "use_htf": true,
-    "htf_timeframe": "240",
+    "htf_timeframe": "15m",
     "use_adx_filter": true,
     "adx_length": 14,
     "adx_min_strength": 20,
@@ -24,7 +24,8 @@
     "sl_atr_mult": 1.5,
     "tp1_atr_mult": 1.0,
     "tp2_atr_mult": 2.0,
-    "tp3_atr_mult": 3.0
+    "tp3_atr_mult": 3.0,
+    "exit_on_reversal": true
   },
   "risk": {
     "position_size": 100,
@@ -40,7 +41,7 @@
   "server": {
     "host": "0.0.0.0",
     "port": 8000,
-    "refresh_interval": 10
+    "refresh_interval": 5
   },
   "logging": {
     "level": "INFO",
