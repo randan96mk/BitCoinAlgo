@@ -25,6 +25,7 @@ async def get_status():
         "exchange": Config().get("exchange.name"),
         "symbol": Config().get("exchange.symbol"),
         "timeframe": Config().get("strategy.timeframe"),
+        "refresh_interval": Config().get("server.refresh_interval", 5),
         "current_price": engine_instance.current_price if engine_instance else 0,
         "last_signal": _signal_to_dict(engine_instance.last_signal) if engine_instance and engine_instance.last_signal else None,
     }
