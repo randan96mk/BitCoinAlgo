@@ -26,6 +26,13 @@ EXCHANGE_APIS = {
         "ticker": "/v5/market/tickers",
         "symbol_fmt": lambda s: s.replace("/", ""),
     },
+    "delta": {
+        # Delta Exchange India — perpetual futures, public market data (no key)
+        "base": "https://api.india.delta.exchange",
+        "klines": "/v2/history/candles",
+        "ticker": "/v2/tickers",
+        "symbol_fmt": lambda s: s.replace("/", "").replace("USDT", "USD"),
+    },
 }
 
 TIMEFRAME_MAP = {
@@ -37,6 +44,13 @@ TIMEFRAME_MAP = {
 BYBIT_TF_MAP = {
     "1m": "1", "3m": "3", "5m": "5", "15m": "15",
     "30m": "30", "1h": "60", "4h": "240", "1d": "D",
+}
+
+# Delta uses the same resolution strings as our normalized timeframes;
+# this maps each to its length in seconds for computing the history window.
+DELTA_RES_SECONDS = {
+    "1m": 60, "3m": 180, "5m": 300, "15m": 900,
+    "30m": 1800, "1h": 3600, "4h": 14400, "1d": 86400,
 }
 
 
@@ -61,11 +75,15 @@ class DataFeed:
             try:
                 api = EXCHANGE_APIS[name]
                 client = httpx.AsyncClient(base_url=api["base"], timeout=15)
-                resp = await client.get(api["ticker"], params={
-                    "symbol": api["symbol_fmt"](self.symbol)
-                } if name == "binance" else {
-                    "category": "linear", "symbol": api["symbol_fmt"](self.symbol)
-                })
+                sym = api["symbol_fmt"](self.symbol)
+                if name == "binance":
+                    resp = await client.get(api["ticker"], params={"symbol": sym})
+                elif name == "bybit":
+                    resp = await client.get(api["ticker"], params={"category": "linear", "symbol": sym})
+                elif name == "delta":
+                    resp = await client.get(f"{api['ticker']}/{sym}")
+                else:
+                    resp = await client.get(api["ticker"], params={"symbol": sym})
                 resp.raise_for_status()
                 self._client = client
                 self._api_config = api
@@ -125,6 +143,30 @@ class DataFeed:
             df = pd.DataFrame(rows)
             df = df.iloc[::-1].reset_index(drop=True)
 
+        elif self.exchange_name == "delta":
+            # Delta needs a [start, end] window (unix seconds) instead of a limit
+            import time as _t
+            res_sec = DELTA_RES_SECONDS.get(tf, 60)
+            end = int(_t.time())
+            start = end - res_sec * limit
+            resp = await self._client.get(self._api_config["klines"], params={
+                "resolution": tf, "symbol": symbol, "start": start, "end": end
+            })
+            resp.raise_for_status()
+            raw = resp.json().get("result", [])
+            rows = []
+            for r in raw:
+                rows.append({
+                    "timestamp": int(r["time"]) * 1000,  # seconds -> ms
+                    "open": float(r["open"]),
+                    "high": float(r["high"]),
+                    "low": float(r["low"]),
+                    "close": float(r["close"]),
+                    "volume": float(r["volume"]),
+                })
+            df = pd.DataFrame(rows)
+            df = df.iloc[::-1].reset_index(drop=True)  # newest-first -> ascending
+
         df["timestamp"] = pd.to_datetime(df["timestamp"], unit="ms", utc=True)
         return df
 
@@ -146,6 +188,10 @@ class DataFeed:
             })
             resp.raise_for_status()
             return float(resp.json()["result"]["list"][0]["lastPrice"])
+        elif self.exchange_name == "delta":
+            resp = await self._client.get(f"{self._api_config['ticker']}/{symbol}")
+            resp.raise_for_status()
+            return float(resp.json()["result"]["close"])
         return 0
 
     @property

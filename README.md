@@ -235,8 +235,11 @@ BitCoinAlgo/
 
 ## Data & Accuracy Notes
 
-- Market data comes from the **public Binance API**, with automatic fallback to
-  **Bybit** — no API keys required.
+- Market data comes from the **public Delta Exchange India API** by default
+  (BTCUSD perpetual futures), with automatic fallback to **Binance** and
+  **Bybit** if Delta is unreachable — no API keys required. Switch exchanges in
+  **Settings**. Note each exchange has its own order book, so signals differ
+  slightly between them; feed from the exchange you actually trade on.
 - Indicators use **Wilder's RMA smoothing** to match TradingView's `ta.rsi` /
   `ta.atr` / `ta.dmi` outputs as closely as possible.
 - If you compare against TradingView, use the **`BINANCE:BTCUSDT`** symbol — the
