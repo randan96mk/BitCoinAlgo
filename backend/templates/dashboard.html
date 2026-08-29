@@ -11,7 +11,7 @@
         <!-- Ticker -->
         <div class="bg-surface rounded-lg p-3 border border-border">
             <div class="flex items-center justify-between mb-1">
-                <span class="text-xs text-muted font-medium">BTCUSDT PERP</span>
+                <span id="ticker-symbol" class="text-xs text-muted font-medium">BTCUSD PERP</span>
                 <span id="tf-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-card text-muted">1m</span>
             </div>
             <div id="live-price" class="text-2xl font-mono font-bold text-profit">--</div>
@@ -155,7 +155,7 @@
             <div class="text-[10px] text-muted uppercase tracking-wider mb-2">Session</div>
             <div class="space-y-1 text-xs">
                 <div class="flex justify-between"><span class="text-muted">Exchange</span><span id="sess-exchange" class="font-mono">--</span></div>
-                <div class="flex justify-between"><span class="text-muted">Symbol</span><span class="font-mono">BTCUSDT</span></div>
+                <div class="flex justify-between"><span class="text-muted">Symbol</span><span id="sess-symbol" class="font-mono">BTCUSD</span></div>
                 <div class="flex justify-between"><span class="text-muted">Uptime</span><span id="sess-uptime" class="font-mono">--</span></div>
                 <div class="flex justify-between"><span class="text-muted">Last Update</span><span id="sess-update" class="font-mono">--</span></div>
             </div>
@@ -230,6 +230,10 @@ async function loadAll() {
         stxt.textContent = status.status;
         document.getElementById('sess-exchange').textContent = status.exchange || '--';
         document.getElementById('tf-badge').textContent = status.timeframe || currentTF;
+        // Dynamic market label (symbol + exchange)
+        const mkt = status.market_symbol || 'BTCUSD';
+        document.getElementById('ticker-symbol').textContent = mkt + ' PERP';
+        document.getElementById('sess-symbol').textContent = mkt;
         // Apply the configured refresh interval (clamped to a sane floor)
         if (status.refresh_interval) applyRefreshInterval(status.refresh_interval);
     }
