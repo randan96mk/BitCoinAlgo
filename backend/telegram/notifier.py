@@ -15,10 +15,11 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def _timestamp_line() -> str:
-    """Current time as 'YYYY-MM-DD HH:MM UTC (HH:MM IST)'."""
+    """Current time as 'YYYY-MM-DD HH:MM UTC (hh:MM AM/PM IST)'."""
     now_utc = datetime.now(timezone.utc)
     now_ist = now_utc.astimezone(IST)
-    return f"{now_utc.strftime('%Y-%m-%d %H:%M')} UTC ({now_ist.strftime('%H:%M')} IST)"
+    ist_12h = now_ist.strftime('%I:%M %p').lstrip('0')
+    return f"{now_utc.strftime('%Y-%m-%d %H:%M')} UTC ({ist_12h} IST)"
 
 
 class TelegramNotifier:
