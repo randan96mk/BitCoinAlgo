@@ -100,7 +100,7 @@ class TradingEngine:
             # Re-read timeframe each cycle so a Settings change applies without
             # a restart. Align next tick to just after the next bar close so
             # signals fire within seconds of the candle completing.
-            tf = self.config.get("strategy.timeframe", "3m")
+            tf = self.config.get("strategy.timeframe", "1m")
             interval = TIMEFRAME_SECONDS.get(tf, 180)
             now = _time.time()
             sleep_s = interval - (now % interval) + 3
@@ -180,7 +180,7 @@ class TradingEngine:
             signal = Signal(
                 timestamp=bar_time,
                 symbol=self.config.get("exchange.symbol", "BTC/USDT"),
-                timeframe=self.config.get("strategy.timeframe", "3m"),
+                timeframe=self.config.get("strategy.timeframe", "1m"),
                 direction=result.signal_type,
                 signal_type="entry",
                 entry_price=result.entry_price,
@@ -259,7 +259,7 @@ class TradingEngine:
 
     async def _send_alert(self, result: SignalResult):
         symbol = self.config.get("exchange.symbol", "BTC/USDT")
-        tf = self.config.get("strategy.timeframe", "3m")
+        tf = self.config.get("strategy.timeframe", "1m")
         msg = self.notifier.format_entry_signal(
             result.signal_type, symbol, tf,
             result.entry_price, result.stop_loss,

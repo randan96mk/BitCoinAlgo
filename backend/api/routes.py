@@ -114,7 +114,7 @@ async def get_chart_candles(timeframe: Optional[str] = Query(None), limit: int =
     if not engine_instance or not engine_instance.feed.is_connected:
         return {"candles": [], "sma50": [], "sma20": [], "rsi": [], "volumes": []}
 
-    tf = timeframe or Config().get("strategy.timeframe", "3m")
+    tf = timeframe or Config().get("strategy.timeframe", "1m")
     try:
         df = await engine_instance.feed.fetch_candles(tf, limit)
     except Exception:
