@@ -186,6 +186,7 @@ All of these are editable in **Settings** (persisted to `config/user.json`):
 | `sl_atr_mult` | `1.5` | Stop-loss distance (× ATR) |
 | `tp1/2/3_atr_mult` | `1.0 / 2.0 / 3.0` | Take-profit distances (× ATR) |
 | `exit_on_reversal` | `true` | Close a position when an opposite signal fires |
+| `max_loss_points` | `50` | Hard cap on stop distance in price points (0 = off) |
 
 > **Default profile — "1-Minute Intraday":** the engine ships tuned for 1m
 > entries with a **15m** higher-timeframe trend filter, 2-bar confirmation, the
