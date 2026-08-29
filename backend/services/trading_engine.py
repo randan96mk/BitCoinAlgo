@@ -72,10 +72,7 @@ class TradingEngine:
             return
 
         self._status = "running"
-        logger.info("Trading engine started")
-
-        tf = self.config.get("strategy.timeframe", "3m")
-        interval = TIMEFRAME_SECONDS.get(tf, 180)
+        logger.info(f"Trading engine started on {self.feed.exchange_name}")
 
         import time as _time
         while self._running:
@@ -100,12 +97,40 @@ class TradingEngine:
                 # status back to "running" (see the try branch above).
                 continue
 
-            # Align next tick to just after the next bar close so signals
-            # fire within seconds of the candle completing (like TradingView),
-            # not up to a full interval late.
+            # Re-read timeframe each cycle so a Settings change applies without
+            # a restart. Align next tick to just after the next bar close so
+            # signals fire within seconds of the candle completing.
+            tf = self.config.get("strategy.timeframe", "3m")
+            interval = TIMEFRAME_SECONDS.get(tf, 180)
             now = _time.time()
             sleep_s = interval - (now % interval) + 3
             await asyncio.sleep(sleep_s)
+
+    async def reload(self):
+        """Rebuild strategy + data feed from the current config and reconnect.
+        Called when settings change so exchange/symbol/params apply live."""
+        logger.info("Reloading engine configuration...")
+        self.strategy = CardwellRSIStrategy(self.config)
+        old_feed = self.feed
+        self.feed = DataFeed(self.config)
+        self.notifier = TelegramNotifier(self.config)
+        self._status = "reconnecting"
+        try:
+            connected = await self.feed.connect()
+        except Exception as e:
+            logger.error(f"Reload connect failed: {e}")
+            connected = False
+        try:
+            await old_feed.close()
+        except Exception:
+            pass
+        if connected:
+            self._status = "running"
+            logger.info(f"Engine reloaded — now using {self.feed.exchange_name}")
+        else:
+            self._status = "disconnected"
+            logger.error("Engine reload could not connect to any exchange")
+        return connected
 
     async def _tick(self):
         df = await self.feed.fetch_candles()

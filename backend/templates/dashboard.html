@@ -15,6 +15,9 @@
                 <span id="tf-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-card text-muted">1m</span>
             </div>
             <div id="live-price" class="text-2xl font-mono font-bold text-profit">--</div>
+            <div class="mt-1">
+                <span id="exchange-badge" class="text-[9px] px-1.5 py-0.5 rounded bg-blue-600/25 text-blue-300 uppercase tracking-wider">--</span>
+            </div>
             <div class="flex items-center gap-2 mt-1">
                 <span id="price-change" class="text-xs font-mono px-1.5 py-0.5 rounded bg-green-900/50 text-profit">+0.00%</span>
                 <span id="price-high-low" class="text-[10px] text-muted">H -- / L --</span>
@@ -243,6 +246,9 @@ async function loadAll() {
         const mkt = status.market_symbol || 'BTCUSD';
         document.getElementById('ticker-symbol').textContent = mkt + ' PERP';
         document.getElementById('sess-symbol').textContent = mkt;
+        const exLabels = { delta: 'Delta India', binance: 'Binance', bybit: 'Bybit' };
+        const exName = exLabels[status.exchange] || (status.exchange || '--');
+        document.getElementById('exchange-badge').textContent = exName;
         // Apply the configured refresh interval (clamped to a sane floor)
         if (status.refresh_interval) applyRefreshInterval(status.refresh_interval);
     }
