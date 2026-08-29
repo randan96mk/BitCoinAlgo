@@ -31,7 +31,8 @@
     "position_size": 100,
     "stop_loss_pct": 1.5,
     "take_profit_pct": 3.0,
-    "risk_pct": 1.0
+    "risk_pct": 1.0,
+    "max_loss_points": 50
   },
   "telegram": {
     "bot_token": "",

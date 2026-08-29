@@ -48,6 +48,8 @@ class CardwellRSIStrategy:
         self.tp1_mult = cfg.get("strategy.tp1_atr_mult", 1.0)
         self.tp2_mult = cfg.get("strategy.tp2_atr_mult", 2.0)
         self.tp3_mult = cfg.get("strategy.tp3_atr_mult", 3.0)
+        # Hard cap on stop-loss distance in price points (0 disables the cap).
+        self.max_loss_points = cfg.get("risk.max_loss_points", 50)
         # Regime state is rebuilt from full history on every evaluate();
         # only the last-fired bar is tracked to avoid duplicate alerts.
         self._last_bar_time = None
@@ -153,12 +155,18 @@ class CardwellRSIStrategy:
         in_bull_range = self.bull_lo <= cur_rsi <= self.bull_hi
         in_bear_range = self.bear_lo <= cur_rsi <= self.bear_hi
 
+        # Stop distance is the ATR-based level, capped at max_loss_points so a
+        # trade never risks more than the configured hard limit.
+        sl_dist = cur_atr * self.sl_mult
+        if self.max_loss_points and self.max_loss_points > 0:
+            sl_dist = min(sl_dist, self.max_loss_points)
+
         if long_signal:
             # Pine: entryPrice = close[1] — previous bar's close
             entry = close.iloc[idx - 1]
             result.signal_type = "long"
             result.entry_price = entry
-            result.stop_loss = entry - cur_atr * self.sl_mult
+            result.stop_loss = entry - sl_dist
             result.tp1 = entry + cur_atr * self.tp1_mult
             result.tp2 = entry + cur_atr * self.tp2_mult
             result.tp3 = entry + cur_atr * self.tp3_mult
@@ -167,7 +175,7 @@ class CardwellRSIStrategy:
             entry = close.iloc[idx - 1]
             result.signal_type = "short"
             result.entry_price = entry
-            result.stop_loss = entry + cur_atr * self.sl_mult
+            result.stop_loss = entry + sl_dist
             result.tp1 = entry - cur_atr * self.tp1_mult
             result.tp2 = entry - cur_atr * self.tp2_mult
             result.tp3 = entry - cur_atr * self.tp3_mult
