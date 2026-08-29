@@ -77,30 +77,43 @@ class TradingEngine:
         tf = self.config.get("strategy.timeframe", "3m")
         interval = TIMEFRAME_SECONDS.get(tf, 180)
 
+        import time as _time
         while self._running:
             try:
                 await self._tick()
+                # A successful tick means we're healthy again — clear any
+                # transient error state so the UI returns to "running".
+                if self._status != "running":
+                    self._status = "running"
+                    logger.info("Engine recovered — status running")
             except Exception as e:
-                logger.error(f"Engine tick error: {e}")
+                logger.exception(f"Engine tick error: {type(e).__name__}: {e}")
                 self._status = "error"
                 await asyncio.sleep(5)
                 if not self.feed.is_connected:
                     self._status = "reconnecting"
-                    await self.feed.connect()
-                    if self.feed.is_connected:
-                        self._status = "running"
+                    try:
+                        await self.feed.connect()
+                    except Exception as ce:
+                        logger.error(f"Reconnect failed: {ce}")
+                # Loop again immediately; the next successful tick flips the
+                # status back to "running" (see the try branch above).
                 continue
 
             # Align next tick to just after the next bar close so signals
             # fire within seconds of the candle completing (like TradingView),
             # not up to a full interval late.
-            import time as _time
             now = _time.time()
             sleep_s = interval - (now % interval) + 3
             await asyncio.sleep(sleep_s)
 
     async def _tick(self):
         df = await self.feed.fetch_candles()
+        if df is None or len(df) == 0:
+            # Empty response — skip this tick without flipping to error state.
+            logger.warning("Empty candle response; skipping tick")
+            return
+
         htf_df = None
         if self.config.get("strategy.use_htf", True):
             try:
