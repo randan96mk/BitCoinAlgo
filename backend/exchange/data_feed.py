@@ -59,7 +59,7 @@ class DataFeed:
         cfg = config or Config()
         self.exchange_name = cfg.get("exchange.name", "binance")
         self.symbol = cfg.get("exchange.symbol", "BTC/USDT")
-        self.timeframe = cfg.get("strategy.timeframe", "3m")
+        self.timeframe = cfg.get("strategy.timeframe", "1m")
         self.htf_timeframe = cfg.get("strategy.htf_timeframe", "240")
         self._client: Optional[httpx.AsyncClient] = None
         self._connected = False

@@ -114,7 +114,7 @@ async def get_chart_candles(timeframe: Optional[str] = Query(None), limit: int =
     if not engine_instance or not engine_instance.feed.is_connected:
         return {"candles": [], "sma50": [], "sma20": [], "rsi": [], "volumes": []}
 
-    tf = timeframe or Config().get("strategy.timeframe", "3m")
+    tf = timeframe or Config().get("strategy.timeframe", "1m")
     try:
         df = await engine_instance.feed.fetch_candles(tf, limit)
     except Exception:
@@ -227,10 +227,26 @@ async def get_config():
 
 @router.post("/config")
 async def update_config(data: dict):
+    from backend.main import engine_instance
     cfg = Config()
+    # Detect changes that require rebuilding the engine's feed/strategy
+    engine_keys = ("exchange.", "strategy.")
+    needs_reload = False
     for key, val in data.items():
+        old = cfg.get(key)
         cfg.set(key, val)
-    return {"status": "ok"}
+        if old != val and any(key.startswith(p) for p in engine_keys):
+            needs_reload = True
+
+    reloaded = False
+    if needs_reload and engine_instance:
+        try:
+            reloaded = await engine_instance.reload()
+        except Exception as e:
+            import logging
+            logging.getLogger("app").error(f"Engine reload failed: {e}")
+
+    return {"status": "ok", "reloaded": reloaded, "needs_reload": needs_reload}
 
 
 def _signal_to_dict(sig) -> dict:

@@ -2,7 +2,7 @@
 Telegram alert sender.
 """
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -10,6 +10,16 @@ import httpx
 from backend.config import Config
 
 logger = logging.getLogger("telegram")
+
+IST = timezone(timedelta(hours=5, minutes=30))
+
+
+def _timestamp_line() -> str:
+    """Current time as 'YYYY-MM-DD HH:MM UTC (hh:MM AM/PM IST)'."""
+    now_utc = datetime.now(timezone.utc)
+    now_ist = now_utc.astimezone(IST)
+    ist_12h = now_ist.strftime('%I:%M %p').lstrip('0')
+    return f"{now_utc.strftime('%Y-%m-%d %H:%M')} UTC ({ist_12h} IST)"
 
 
 class TelegramNotifier:
@@ -70,7 +80,7 @@ class TelegramNotifier:
             f"<b>Risk/Reward:</b> {rr}\n"
             f"<b>Signal Score:</b> {score:.0f}%\n"
             f"<b>RSI:</b> {rsi:.1f} | <b>ADX:</b> {adx:.1f}\n\n"
-            f"<b>Time:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            f"<b>Time:</b> {_timestamp_line()}"
         )
 
     def format_exit_signal(self, direction: str, symbol: str,
@@ -95,5 +105,5 @@ class TelegramNotifier:
             f"<b>PnL:</b> {pnl:.2f} USDT\n"
             f"<b>Profit:</b> {pnl_pct:.2f}%\n"
             f"<b>Reason:</b> {reason_label}\n\n"
-            f"<b>Time:</b> {datetime.utcnow().strftime('%Y-%m-%d %H:%M UTC')}"
+            f"<b>Time:</b> {_timestamp_line()}"
         )

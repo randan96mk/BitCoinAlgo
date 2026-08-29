@@ -30,7 +30,7 @@
                 <div>
                     <label class="block text-muted mb-1">Exchange</label>
                     <select id="exchange.name" class="w-full bg-card border border-border rounded px-2.5 py-2">
-                        <option value="binance">Binance</option><option value="bybit">Bybit</option><option value="delta">Delta (India)</option>
+                        <option value="delta">Delta (India)</option><option value="binance">Binance</option><option value="bybit">Bybit</option>
                     </select>
                 </div>
                 <div>
@@ -138,10 +138,15 @@ document.getElementById('settings-form').onsubmit = async (e) => {
         if (!el.id) return;
         data[el.id] = el.type === 'checkbox' ? el.checked : el.type === 'number' ? Number(el.value) : el.value;
     });
-    await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    const resp = await fetch('/api/config', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
+    let result = {};
+    try { result = await resp.json(); } catch(e) {}
     const s = document.getElementById('save-status');
-    s.classList.remove('hidden');
-    setTimeout(() => s.classList.add('hidden'), 3000);
+    s.textContent = result.needs_reload
+        ? (result.reloaded ? 'Saved — engine restarted with new settings' : 'Saved — but engine could not reconnect')
+        : 'Saved!';
+    s.className = 'text-xs ' + (result.needs_reload && !result.reloaded ? 'text-loss' : 'text-profit');
+    setTimeout(() => s.classList.add('hidden'), 4000);
 };
 loadConfig();
 </script>
