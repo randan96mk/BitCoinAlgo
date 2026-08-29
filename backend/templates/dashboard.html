@@ -11,7 +11,7 @@
         <!-- Ticker -->
         <div class="bg-surface rounded-lg p-3 border border-border">
             <div class="flex items-center justify-between mb-1">
-                <span class="text-xs text-muted font-medium">BTCUSDT PERP</span>
+                <span id="ticker-symbol" class="text-xs text-muted font-medium">BTCUSD PERP</span>
                 <span id="tf-badge" class="text-[10px] px-1.5 py-0.5 rounded bg-card text-muted">1m</span>
             </div>
             <div id="live-price" class="text-2xl font-mono font-bold text-profit">--</div>
@@ -105,6 +105,12 @@
                 <span class="flex items-center gap-1"><span class="w-2 h-0.5 bg-yellow-400 inline-block"></span><span class="text-muted">SMA20</span></span>
                 <span class="flex items-center gap-1"><span class="w-2 h-0.5 bg-purple-500 inline-block"></span><span class="text-muted">SMA50</span></span>
                 <span id="candle-time" class="text-muted font-mono">--</span>
+                <span class="w-px h-4 bg-border"></span>
+                <span class="flex items-center gap-1">
+                    <span class="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block"></span>
+                    <span class="text-muted">refresh</span>
+                    <span id="refresh-countdown" class="text-blue-400 font-mono">--</span>
+                </span>
             </div>
         </div>
 
@@ -155,7 +161,7 @@
             <div class="text-[10px] text-muted uppercase tracking-wider mb-2">Session</div>
             <div class="space-y-1 text-xs">
                 <div class="flex justify-between"><span class="text-muted">Exchange</span><span id="sess-exchange" class="font-mono">--</span></div>
-                <div class="flex justify-between"><span class="text-muted">Symbol</span><span class="font-mono">BTCUSDT</span></div>
+                <div class="flex justify-between"><span class="text-muted">Symbol</span><span id="sess-symbol" class="font-mono">BTCUSD</span></div>
                 <div class="flex justify-between"><span class="text-muted">Uptime</span><span id="sess-uptime" class="font-mono">--</span></div>
                 <div class="flex justify-between"><span class="text-muted">Last Update</span><span id="sess-update" class="font-mono">--</span></div>
             </div>
@@ -213,8 +219,11 @@ let currentTF = '1m', showSMA = true, showVol = true, showRSI = true;
 let knownSignalIds = new Set();
 let firstLoad = true;
 
+let nextRefreshAt = Date.now() + 5000;
+
 // ── Data loader ──
 async function loadAll() {
+    nextRefreshAt = Date.now() + refreshMs;
     const [chartData, status, signals, analytics] = await Promise.all([
         fetchJSON(`/api/chart/candles?timeframe=${currentTF}&limit=300`),
         fetchJSON('/api/status'),
@@ -230,6 +239,10 @@ async function loadAll() {
         stxt.textContent = status.status;
         document.getElementById('sess-exchange').textContent = status.exchange || '--';
         document.getElementById('tf-badge').textContent = status.timeframe || currentTF;
+        // Dynamic market label (symbol + exchange)
+        const mkt = status.market_symbol || 'BTCUSD';
+        document.getElementById('ticker-symbol').textContent = mkt + ' PERP';
+        document.getElementById('sess-symbol').textContent = mkt;
         // Apply the configured refresh interval (clamped to a sane floor)
         if (status.refresh_interval) applyRefreshInterval(status.refresh_interval);
     }
@@ -482,6 +495,14 @@ function applyRefreshInterval(seconds) {
     if (refreshTimer) clearInterval(refreshTimer);
     refreshTimer = setInterval(loadAll, refreshMs);
 }
+
+// ── Refresh countdown (updates the toolbar timer every 250ms) ──
+setInterval(() => {
+    const el = document.getElementById('refresh-countdown');
+    if (!el) return;
+    const rem = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
+    el.textContent = rem + 's';
+}, 250);
 
 // ── Go ──
 loadAll();

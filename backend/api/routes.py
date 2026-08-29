@@ -20,10 +20,24 @@ def _get_db():
 @router.get("/status")
 async def get_status():
     from backend.main import engine_instance
+    cfg_symbol = Config().get("exchange.symbol")
+    # Actual connected exchange + its market symbol (falls back to config)
+    exchange = Config().get("exchange.name")
+    market_symbol = cfg_symbol.replace("/", "")
+    if engine_instance and getattr(engine_instance, "feed", None):
+        feed = engine_instance.feed
+        if getattr(feed, "exchange_name", None):
+            exchange = feed.exchange_name
+        if getattr(feed, "_api_config", None):
+            try:
+                market_symbol = feed._api_config["symbol_fmt"](cfg_symbol)
+            except Exception:
+                pass
     return {
         "status": engine_instance.status if engine_instance else "stopped",
-        "exchange": Config().get("exchange.name"),
-        "symbol": Config().get("exchange.symbol"),
+        "exchange": exchange,
+        "symbol": cfg_symbol,
+        "market_symbol": market_symbol,
         "timeframe": Config().get("strategy.timeframe"),
         "refresh_interval": Config().get("server.refresh_interval", 5),
         "current_price": engine_instance.current_price if engine_instance else 0,

@@ -1,6 +1,6 @@
 {
   "exchange": {
-    "name": "binance",
+    "name": "delta",
     "symbol": "BTC/USDT",
     "type": "future"
   },
